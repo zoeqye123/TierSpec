@@ -1,0 +1,434 @@
+import { randomUUID } from 'node:crypto';
+
+import type { Database } from '../db/client.js';
+import { Complexity, ItemStatus, ItemType, isValidParentType, type Item } from '../db/types.js';
+import {
+  createItemSchema,
+  deleteItemSchema,
+  getItemSchema,
+  moveItemSchema,
+  reorderItemsSchema,
+  type CreateItemInput,
+  type DeleteItemInput,
+  type GetItemInput,
+  type MoveItemInput,
+  type ReorderItemsInput,
+} from '../schemas/hierarchy.js';
+
+type ToolRegistrar = {
+  registerTool(
+    name: string,
+    config: {
+      title?: string;
+      description?: string;
+      inputSchema?: unknown;
+      annotations?: {
+        title?: string;
+        readOnlyHint?: boolean;
+        destructiveHint?: boolean;
+        idempotentHint?: boolean;
+        openWorldHint?: boolean;
+      };
+    },
+    cb: (args: any) => Promise<{ content: Array<{ type: 'text'; text: string }>; structuredContent?: unknown }> | { content: Array<{ type: 'text'; text: string }>; structuredContent?: unknown },
+  ): unknown;
+};
+
+type ItemRow = Omit<Item, 'labels' | 'ai_generated'> & {
+  labels: string;
+  ai_generated: number;
+};
+
+type ActiveItemRow = Pick<Item, 'id' | 'type' | 'parent_id' | 'position'>;
+
+type ItemTree = Item & {
+  children: ItemTree[];
+};
+
+type HierarchyToolsOptions = {
+  database: Database;
+  actorUserId: string;
+};
+
+const baseSelect = `
+  SELECT
+    id,
+    type,
+    parent_id,
+    title,
+    description,
+    status,
+    priority,
+    labels,
+    position,
+    story_points,
+    complexity,
+    ai_generated,
+    ai_confidence,
+    ai_reasoning,
+    created_at,
+    updated_at,
+    deleted_at,
+    created_by,
+    updated_by
+  FROM items
+`;
+
+function toItem(row: ItemRow): Item {
+  return {
+    ...row,
+    type: row.type as ItemType,
+    status: row.status as ItemStatus,
+    complexity: row.complexity as Complexity | null,
+    labels: JSON.parse(row.labels) as string[],
+    ai_generated: Boolean(row.ai_generated),
+  };
+}
+
+function formatResult(value: unknown) {
+  return {
+    content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }],
+    structuredContent: value,
+  };
+}
+
+function missingItemMessage(id: string) {
+  return `Item not found: ${id}`;
+}
+
+export function createHierarchyTools({ database, actorUserId }: HierarchyToolsOptions) {
+  const getItemRowById = database.prepare<unknown[], ItemRow>(`${baseSelect} WHERE id = ? AND deleted_at IS NULL`);
+  const getAnyItemRowById = database.prepare<unknown[], ItemRow>(`${baseSelect} WHERE id = ?`);
+  const getChildrenRows = database.prepare<unknown[], ItemRow>(`${baseSelect} WHERE parent_id = ? AND deleted_at IS NULL ORDER BY position ASC, created_at ASC`);
+  const getRootChildrenRows = database.prepare<unknown[], ItemRow>(`${baseSelect} WHERE parent_id IS NULL AND deleted_at IS NULL ORDER BY position ASC, created_at ASC`);
+  const getDescendantRows = database.prepare<unknown[], ItemRow>(`
+    SELECT i.*
+    FROM items i
+    JOIN item_paths ip ON ip.descendant_id = i.id
+    WHERE ip.ancestor_id = ?
+      AND i.deleted_at IS NULL
+    ORDER BY ip.depth ASC, i.position ASC, i.created_at ASC
+  `);
+  const getActiveItemSummary = database.prepare<unknown[], ActiveItemRow>(`
+    SELECT id, type, parent_id, position
+    FROM items
+    WHERE id = ? AND deleted_at IS NULL
+  `);
+  const getMaxSiblingPosition = database.prepare<unknown[], { max_position: number | null }>(`
+    SELECT MAX(position) AS max_position
+    FROM items
+    WHERE deleted_at IS NULL
+      AND ((? IS NULL AND parent_id IS NULL) OR parent_id = ?)
+  `);
+  const insertItem = database.prepare(`
+    INSERT INTO items (
+      id,
+      type,
+      parent_id,
+      title,
+      description,
+      status,
+      priority,
+      labels,
+      position,
+      ai_generated,
+      created_by,
+      updated_by
+    ) VALUES (
+      @id,
+      @type,
+      @parent_id,
+      @title,
+      @description,
+      @status,
+      @priority,
+      @labels,
+      @position,
+      @ai_generated,
+      @created_by,
+      @updated_by
+    )
+  `);
+  const updateParent = database.prepare(`UPDATE items SET parent_id = ?, updated_by = ? WHERE id = ? AND deleted_at IS NULL`);
+  const updatePosition = database.prepare(`UPDATE items SET position = ?, updated_by = ? WHERE id = ? AND deleted_at IS NULL`);
+  const softDeleteById = database.prepare(`
+    UPDATE items
+    SET deleted_at = datetime('now'), updated_by = ?
+    WHERE id = ? AND deleted_at IS NULL
+  `);
+  const softDeleteSubtree = database.prepare(`
+    UPDATE items
+    SET deleted_at = datetime('now'), updated_by = ?
+    WHERE id IN (
+      SELECT descendant_id
+      FROM item_paths
+      WHERE ancestor_id = ?
+    )
+      AND deleted_at IS NULL
+  `);
+  const getSubtreeIds = database.prepare<unknown[], { id: string }>(`
+    SELECT descendant_id AS id
+    FROM item_paths
+    WHERE ancestor_id = ?
+    ORDER BY depth ASC
+  `);
+  const isDescendant = database.prepare<unknown[], { has_match: 1 }>(`
+    SELECT 1 AS has_match
+    FROM item_paths
+    WHERE ancestor_id = ? AND descendant_id = ?
+  `);
+
+  function requireActiveItem(id: string) {
+    const row = getItemRowById.get(id);
+    if (!row) {
+      throw new Error(missingItemMessage(id));
+    }
+    return toItem(row);
+  }
+
+  function requireActiveParent(id: string | null) {
+    if (id === null) {
+      return null;
+    }
+
+    return requireActiveItem(id);
+  }
+
+  function validateParentRelationship(childType: ItemType, parent: Item | null) {
+    if (!isValidParentType(childType, parent?.type ?? null)) {
+      throw new Error(`Invalid parent type for ${childType}`);
+    }
+  }
+
+  function getNextPosition(parentId: string | null) {
+    const row = getMaxSiblingPosition.get(parentId, parentId);
+    return (row?.max_position ?? -1) + 1;
+  }
+
+  function buildTree(rootId: string) {
+    const rows = getDescendantRows.all(rootId).map(toItem);
+    if (rows.length === 0) {
+      throw new Error(missingItemMessage(rootId));
+    }
+
+    const nodes = new Map<string, ItemTree>();
+    for (const item of rows) {
+      nodes.set(item.id, { ...item, children: [] });
+    }
+
+    let root: ItemTree | undefined;
+    for (const item of nodes.values()) {
+      if (item.id === rootId) {
+        root = item;
+        continue;
+      }
+
+      const parent = item.parent_id ? nodes.get(item.parent_id) : undefined;
+      parent?.children.push(item);
+    }
+
+    if (!root) {
+      throw new Error(missingItemMessage(rootId));
+    }
+
+    return root;
+  }
+
+  const createItemTx = database.transaction((input: CreateItemInput) => {
+    const parsed = createItemSchema.parse(input);
+    const parent = requireActiveParent(parsed.parent_id ?? null);
+    validateParentRelationship(parsed.type, parent);
+
+    const id = randomUUID();
+    insertItem.run({
+      id,
+      type: parsed.type,
+      parent_id: parsed.parent_id ?? null,
+      title: parsed.title,
+      description: parsed.description ?? null,
+      status: ItemStatus.Backlog,
+      priority: 0,
+      labels: '[]',
+      position: getNextPosition(parsed.parent_id ?? null),
+      ai_generated: 0,
+      created_by: actorUserId,
+      updated_by: actorUserId,
+    });
+
+    return requireActiveItem(id);
+  });
+
+  const moveItemTx = database.transaction((input: MoveItemInput) => {
+    const parsed = moveItemSchema.parse(input);
+    const item = requireActiveItem(parsed.item_id);
+    const parent = requireActiveParent(parsed.new_parent_id);
+
+    if (parsed.new_parent_id === item.id) {
+      throw new Error('Cannot move an item under itself');
+    }
+
+    if (parsed.new_parent_id !== null && isDescendant.get(item.id, parsed.new_parent_id)) {
+      throw new Error('Cannot move an item under one of its descendants');
+    }
+
+    validateParentRelationship(item.type, parent);
+    updateParent.run(parsed.new_parent_id, actorUserId, item.id);
+
+    return requireActiveItem(item.id);
+  });
+
+  const reorderItemsTx = database.transaction((input: ReorderItemsInput) => {
+    const parsed = reorderItemsSchema.parse(input);
+    const seen = new Set<string>();
+
+    for (const entry of parsed.item_positions) {
+      if (seen.has(entry.item_id)) {
+        throw new Error(`Duplicate item id in reorder request: ${entry.item_id}`);
+      }
+      seen.add(entry.item_id);
+
+      const item = getActiveItemSummary.get(entry.item_id);
+      if (!item) {
+        throw new Error(missingItemMessage(entry.item_id));
+      }
+
+      if (item.parent_id !== parsed.parent_id) {
+        throw new Error(`Item ${entry.item_id} does not belong to the requested parent`);
+      }
+
+      updatePosition.run(entry.position, actorUserId, entry.item_id);
+    }
+
+    const rows = parsed.parent_id === null
+      ? getRootChildrenRows.all()
+      : getChildrenRows.all(parsed.parent_id);
+
+    return rows.map(toItem).filter((item) => seen.has(item.id));
+  });
+
+  const deleteItemTx = database.transaction((input: DeleteItemInput) => {
+    const parsed = deleteItemSchema.parse(input);
+    const existing = getAnyItemRowById.get(parsed.item_id);
+    if (!existing) {
+      throw new Error(missingItemMessage(parsed.item_id));
+    }
+
+    if (parsed.cascade_children) {
+      softDeleteSubtree.run(actorUserId, parsed.item_id);
+      return;
+    }
+
+    softDeleteById.run(actorUserId, parsed.item_id);
+  });
+
+  return {
+    createItem(input: CreateItemInput) {
+      return createItemTx(input);
+    },
+    getItem(input: GetItemInput) {
+      const parsed = getItemSchema.parse(input);
+      return buildTree(parsed.id);
+    },
+    moveItem(input: MoveItemInput) {
+      return moveItemTx(input);
+    },
+    reorderItems(input: ReorderItemsInput) {
+      return reorderItemsTx(input);
+    },
+    deleteItem(input: DeleteItemInput) {
+      deleteItemTx(input);
+    },
+  };
+}
+
+export function registerHierarchyTools(server: ToolRegistrar, options: HierarchyToolsOptions) {
+  const tools = createHierarchyTools(options);
+
+  server.registerTool(
+    'create_item',
+    {
+      title: 'Create Item',
+      description: 'Create a hierarchy item under a valid parent.',
+      inputSchema: createItemSchema,
+      annotations: {
+        title: 'Create Item',
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (args) => formatResult(tools.createItem(args)),
+  );
+
+  server.registerTool(
+    'get_item',
+    {
+      title: 'Get Item',
+      description: 'Fetch an item and its active child hierarchy.',
+      inputSchema: getItemSchema,
+      annotations: {
+        title: 'Get Item',
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (args) => formatResult(tools.getItem(args)),
+  );
+
+  server.registerTool(
+    'move_item',
+    {
+      title: 'Move Item',
+      description: 'Move an item to a new parent while preserving hierarchy integrity.',
+      inputSchema: moveItemSchema,
+      annotations: {
+        title: 'Move Item',
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (args) => formatResult(tools.moveItem(args)),
+  );
+
+  server.registerTool(
+    'reorder_items',
+    {
+      title: 'Reorder Items',
+      description: 'Update sibling positions for items under the same parent.',
+      inputSchema: reorderItemsSchema,
+      annotations: {
+        title: 'Reorder Items',
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (args) => formatResult(tools.reorderItems(args)),
+  );
+
+  server.registerTool(
+    'delete_item',
+    {
+      title: 'Delete Item',
+      description: 'Soft delete an item, optionally cascading to descendants.',
+      inputSchema: deleteItemSchema,
+      annotations: {
+        title: 'Delete Item',
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (args) => formatResult((tools.deleteItem(args), { success: true })),
+  );
+
+  return tools;
+}
+
+export type { ItemTree, HierarchyToolsOptions };

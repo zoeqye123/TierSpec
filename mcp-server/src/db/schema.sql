@@ -92,6 +92,87 @@ BEGIN
     UPDATE items SET updated_at = datetime('now') WHERE id = NEW.id;
 END;
 
+-- Trigger: Enforce valid parent-child type combinations on INSERT
+CREATE TRIGGER IF NOT EXISTS validate_item_parent_type_insert
+BEFORE INSERT ON items
+FOR EACH ROW
+WHEN NEW.parent_id IS NOT NULL
+BEGIN
+    SELECT RAISE(ABORT, 'valid_parent_type')
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM items parent
+        WHERE parent.id = NEW.parent_id
+          AND (
+              (NEW.type = 'feature' AND parent.type = 'capability') OR
+              (NEW.type = 'epic' AND parent.type = 'feature') OR
+              (NEW.type = 'business_story' AND parent.type = 'epic') OR
+              (NEW.type = 'technical_story' AND parent.type = 'epic') OR
+              (NEW.type = 'test_case' AND parent.type IN ('business_story', 'technical_story'))
+          )
+    );
+END;
+
+-- Trigger: Enforce root-only capabilities and validate parent-child type combinations on UPDATE
+CREATE TRIGGER IF NOT EXISTS validate_item_parent_type_update
+BEFORE UPDATE OF parent_id, type ON items
+FOR EACH ROW
+BEGIN
+    SELECT RAISE(ABORT, 'valid_parent_type')
+    WHERE NEW.parent_id IS NULL AND NEW.type != 'capability';
+
+    SELECT RAISE(ABORT, 'valid_parent_type')
+    WHERE NEW.parent_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1
+        FROM items parent
+        WHERE parent.id = NEW.parent_id
+          AND (
+              (NEW.type = 'feature' AND parent.type = 'capability') OR
+              (NEW.type = 'epic' AND parent.type = 'feature') OR
+              (NEW.type = 'business_story' AND parent.type = 'epic') OR
+              (NEW.type = 'technical_story' AND parent.type = 'epic') OR
+              (NEW.type = 'test_case' AND parent.type IN ('business_story', 'technical_story'))
+          )
+    );
+END;
+
+-- Trigger: Prevent non-root item types from being inserted without a parent
+CREATE TRIGGER IF NOT EXISTS validate_item_root_type_insert
+BEFORE INSERT ON items
+FOR EACH ROW
+BEGIN
+    SELECT RAISE(ABORT, 'valid_parent_type')
+    WHERE NEW.parent_id IS NULL AND NEW.type != 'capability';
+END;
+
+-- Trigger: Detect direct self-parenting on INSERT
+CREATE TRIGGER IF NOT EXISTS prevent_self_parent_insert
+BEFORE INSERT ON items
+FOR EACH ROW
+WHEN NEW.parent_id IS NOT NULL
+BEGIN
+    SELECT RAISE(ABORT, 'circular reference')
+    WHERE NEW.parent_id = NEW.id;
+END;
+
+-- Trigger: Detect circular references before reparenting
+CREATE TRIGGER IF NOT EXISTS prevent_circular_reference_update
+BEFORE UPDATE OF parent_id ON items
+FOR EACH ROW
+WHEN NEW.parent_id IS NOT NULL
+BEGIN
+    SELECT RAISE(ABORT, 'circular reference')
+    WHERE NEW.parent_id = NEW.id;
+
+    SELECT RAISE(ABORT, 'circular reference')
+    WHERE EXISTS (
+        SELECT 1
+        FROM item_paths
+        WHERE ancestor_id = NEW.id
+          AND descendant_id = NEW.parent_id
+    );
+END;
+
 -- Trigger: Maintain closure table on INSERT
 -- Self-reference and ancestor paths
 CREATE TRIGGER IF NOT EXISTS maintain_item_paths_insert
@@ -125,16 +206,27 @@ BEGIN
         NEW.updated_by
     );
 
-    -- Delete old paths (except self-reference)
+    -- Delete links from old ancestors into the moved subtree
     DELETE FROM item_paths
-    WHERE descendant_id = NEW.id AND depth > 0;
+    WHERE descendant_id IN (
+        SELECT descendant_id
+        FROM item_paths
+        WHERE ancestor_id = NEW.id
+    )
+    AND ancestor_id IN (
+        SELECT ancestor_id
+        FROM item_paths
+        WHERE descendant_id = OLD.id
+          AND ancestor_id != descendant_id
+    );
 
-    -- Insert new paths (if has new parent)
-    -- Note: Circular reference check should be done in application layer
+    -- Insert links from new ancestors into the moved subtree
     INSERT INTO item_paths (ancestor_id, descendant_id, depth)
-    SELECT ip.ancestor_id, NEW.id, ip.depth + 1
-    FROM item_paths ip
-    WHERE ip.descendant_id = NEW.parent_id;
+    SELECT supertree.ancestor_id, subtree.descendant_id, supertree.depth + subtree.depth + 1
+    FROM item_paths AS supertree
+    JOIN item_paths AS subtree
+      ON subtree.ancestor_id = NEW.id
+    WHERE supertree.descendant_id = NEW.parent_id;
 END;
 
 -- Trigger: Cascade delete paths when item is deleted
