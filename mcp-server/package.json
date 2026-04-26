@@ -1,13 +1,42 @@
 {
   "name": "@tierspec/mcp-server",
   "version": "0.1.0",
+  "description": "AI-driven project management MCP server for hierarchical requirements",
   "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "tierspec-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
   },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "project-management",
+    "hierarchy",
+    "requirements",
+    "ai"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YOUR_USERNAME/tierspec.git",
+    "directory": "mcp-server"
+  },
+  "bugs": {
+    "url": "https://github.com/YOUR_USERNAME/tierspec/issues"
+  },
+  "homepage": "https://github.com/YOUR_USERNAME/tierspec#readme",
   "dependencies": {
     "@modelcontextprotocol/sdk": "latest",
     "zod": "^3.23.0",
@@ -18,5 +47,8 @@
     "@types/node": "^20.0.0",
     "@types/better-sqlite3": "^7.6.0",
     "vitest": "^1.6.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

@@ -35,6 +35,10 @@ Environment variables:
 - `TSPEC_MCP_DB` - Database path (default: `~/.tierspec/tierspec.db`)
 - `TSPEC_MCP_ACTOR` - Default actor user ID (default: `system`)
 
+Legacy compatibility aliases are also accepted:
+- `TIERSPEC_MCP_DB_PATH`
+- `TIERSPEC_MCP_ACTOR_ID`
+
 ## MCP Tools
 
 ### Hierarchy Tools (5)
