@@ -33,6 +33,13 @@ export enum Complexity {
   XL = 'xl',
 }
 
+export enum SprintStatus {
+  Planning = 'planning',
+  Active = 'active',
+  Completed = 'completed',
+  Cancelled = 'cancelled',
+}
+
 /** Core item entity */
 export interface Item {
   id: string;
@@ -81,6 +88,31 @@ export interface User {
   email: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface Sprint {
+  id: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+  capacity_points: number;
+  status: SprintStatus;
+  committed_points: number;
+  completed_points: number;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+}
+
+export interface SprintAssignment {
+  id: string;
+  item_id: string;
+  sprint_id: string;
+  assigned_at: string;
+  removed_at: string | null;
+  assigned_by: string | null;
+  removed_by: string | null;
+  removal_reason: string | null;
 }
 
 /** Type guard for valid item types */

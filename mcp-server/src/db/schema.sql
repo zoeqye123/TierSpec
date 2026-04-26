@@ -26,8 +26,14 @@ CREATE TABLE IF NOT EXISTS items (
 
     -- Classification
     status TEXT NOT NULL DEFAULT 'backlog',
+    previous_state TEXT,
     priority INTEGER DEFAULT 0 CHECK (priority BETWEEN 0 AND 100),
     labels TEXT DEFAULT '[]',  -- JSON array of strings
+    blocker_item_id TEXT,
+    blocker_reason TEXT,
+    blocker_type TEXT,
+    blocker_detected_at TEXT,
+    blocker_expected_resolution TEXT,
 
     -- Ordering (REAL for drag-drop)
     position REAL NOT NULL DEFAULT 0,
@@ -58,6 +64,21 @@ CREATE INDEX IF NOT EXISTS idx_items_status ON items(status) WHERE deleted_at IS
 CREATE INDEX IF NOT EXISTS idx_items_position ON items(parent_id, position) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_items_created_by ON items(created_by);
 CREATE INDEX IF NOT EXISTS idx_items_updated_by ON items(updated_by);
+
+-- Audit events for workflow/state changes
+CREATE TABLE IF NOT EXISTS audit_events (
+    id TEXT PRIMARY KEY,
+    timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+    actor_id TEXT NOT NULL REFERENCES users(id),
+    action_type TEXT NOT NULL CHECK (action_type IN ('STATE_CHANGE', 'BLOCK', 'UNBLOCK')),
+    entity_type TEXT NOT NULL CHECK (entity_type IN ('item')),
+    entity_id TEXT NOT NULL,
+    changes TEXT NOT NULL DEFAULT '[]',
+    reason TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_events_entity ON audit_events(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_audit_events_timestamp ON audit_events(timestamp);
 
 -- Closure table for fast subtree queries
 CREATE TABLE IF NOT EXISTS item_paths (
@@ -253,3 +274,68 @@ SELECT
 FROM items i
 JOIN item_paths ip ON i.id = ip.descendant_id
 WHERE i.deleted_at IS NULL;
+
+-- Sprints table
+CREATE TABLE IF NOT EXISTS sprints (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    
+    -- Timeline
+    start_date TEXT NOT NULL,
+    end_date TEXT NOT NULL,
+    
+    -- Capacity
+    capacity_points INTEGER NOT NULL DEFAULT 0,
+    
+    -- Status
+    status TEXT NOT NULL DEFAULT 'planning' CHECK (status IN ('planning', 'active', 'completed', 'cancelled')),
+    
+    -- Computed metrics
+    committed_points INTEGER DEFAULT 0,
+    completed_points INTEGER DEFAULT 0,
+    
+    -- Timestamps
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_by TEXT NOT NULL REFERENCES users(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sprints_status ON sprints(status);
+CREATE INDEX IF NOT EXISTS idx_sprints_dates ON sprints(start_date, end_date);
+
+-- Sprint assignments
+CREATE TABLE IF NOT EXISTS sprint_assignments (
+    id TEXT PRIMARY KEY,
+    item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+    sprint_id TEXT NOT NULL REFERENCES sprints(id) ON DELETE CASCADE,
+    
+    assigned_at TEXT NOT NULL DEFAULT (datetime('now')),
+    removed_at TEXT,
+    assigned_by TEXT REFERENCES users(id),
+    removed_by TEXT REFERENCES users(id),
+    removal_reason TEXT,
+    
+    UNIQUE (item_id, assigned_at)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sprint_assignments_item ON sprint_assignments(item_id) WHERE removed_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_sprint_assignments_sprint ON sprint_assignments(sprint_id);
+
+-- Trigger: Auto-update sprint updated_at
+CREATE TRIGGER IF NOT EXISTS update_sprints_timestamp
+AFTER UPDATE ON sprints
+FOR EACH ROW
+BEGIN
+    UPDATE sprints SET updated_at = datetime('now') WHERE id = NEW.id;
+END;
+
+-- View: Current sprint assignments
+CREATE VIEW IF NOT EXISTS current_sprint_assignments AS
+SELECT 
+    sa.item_id,
+    sa.sprint_id,
+    s.name AS sprint_name,
+    s.status AS sprint_status
+FROM sprint_assignments sa
+JOIN sprints s ON s.id = sa.sprint_id
+WHERE sa.removed_at IS NULL;
