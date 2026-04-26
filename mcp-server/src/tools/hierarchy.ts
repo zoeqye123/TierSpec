@@ -8,11 +8,13 @@ import {
   getItemSchema,
   moveItemSchema,
   reorderItemsSchema,
+  updateItemSchema,
   type CreateItemInput,
   type DeleteItemInput,
   type GetItemInput,
   type MoveItemInput,
   type ReorderItemsInput,
+  type UpdateItemInput,
 } from '../schemas/hierarchy.js';
 
 type ToolRegistrar = {
@@ -151,6 +153,20 @@ export function createHierarchyTools({ database, actorUserId }: HierarchyToolsOp
   `);
   const updateParent = database.prepare(`UPDATE items SET parent_id = ?, updated_by = ? WHERE id = ? AND deleted_at IS NULL`);
   const updatePosition = database.prepare(`UPDATE items SET position = ?, updated_by = ? WHERE id = ? AND deleted_at IS NULL`);
+  const updateItemFields = database.prepare(`
+    UPDATE items
+    SET
+      title = COALESCE(@title, title),
+      description = COALESCE(@description, description),
+      status = COALESCE(@status, status),
+      priority = COALESCE(@priority, priority),
+      story_points = COALESCE(@story_points, story_points),
+      complexity = COALESCE(@complexity, complexity),
+      labels = COALESCE(@labels, labels),
+      updated_by = @updated_by,
+      updated_at = datetime('now')
+    WHERE id = @id AND deleted_at IS NULL
+  `);
   const softDeleteById = database.prepare(`
     UPDATE items
     SET deleted_at = datetime('now'), updated_by = ?
@@ -171,6 +187,14 @@ export function createHierarchyTools({ database, actorUserId }: HierarchyToolsOp
     FROM item_paths
     WHERE ancestor_id = ?
     ORDER BY depth ASC
+  `);
+  const getActiveDescendantCount = database.prepare<unknown[], { count: number }>(`
+    SELECT COUNT(*) AS count
+    FROM item_paths ip
+    JOIN items i ON i.id = ip.descendant_id
+    WHERE ip.ancestor_id = ?
+      AND ip.depth > 0
+      AND i.deleted_at IS NULL
   `);
   const isDescendant = database.prepare<unknown[], { has_match: 1 }>(`
     SELECT 1 AS has_match
@@ -318,7 +342,31 @@ export function createHierarchyTools({ database, actorUserId }: HierarchyToolsOp
       return;
     }
 
+    const activeDescendants = getActiveDescendantCount.get(parsed.item_id)?.count ?? 0;
+    if (activeDescendants > 0) {
+      throw new Error('Cannot delete item without cascade while active descendants exist. Use cascade_children=true.');
+    }
+
     softDeleteById.run(actorUserId, parsed.item_id);
+  });
+
+  const updateItemTx = database.transaction((input: UpdateItemInput) => {
+    const parsed = updateItemSchema.parse(input);
+    const existing = requireActiveItem(parsed.item_id);
+
+    updateItemFields.run({
+      id: parsed.item_id,
+      title: parsed.title ?? null,
+      description: parsed.description ?? null,
+      status: parsed.status ?? null,
+      priority: parsed.priority ?? null,
+      story_points: parsed.story_points ?? null,
+      complexity: parsed.complexity ?? null,
+      labels: parsed.labels ? JSON.stringify(parsed.labels) : null,
+      updated_by: actorUserId,
+    });
+
+    return requireActiveItem(parsed.item_id);
   });
 
   return {
@@ -337,6 +385,9 @@ export function createHierarchyTools({ database, actorUserId }: HierarchyToolsOp
     },
     deleteItem(input: DeleteItemInput) {
       deleteItemTx(input);
+    },
+    updateItem(input: UpdateItemInput) {
+      return updateItemTx(input);
     },
   };
 }
@@ -426,6 +477,23 @@ export function registerHierarchyTools(server: ToolRegistrar, options: Hierarchy
       },
     },
     async (args) => formatResult((tools.deleteItem(args), { success: true })),
+  );
+
+  server.registerTool(
+    'update_item',
+    {
+      title: 'Update Item',
+      description: 'Update item fields: title, description, status, priority, story_points, complexity, labels.',
+      inputSchema: updateItemSchema,
+      annotations: {
+        title: 'Update Item',
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (args) => formatResult(tools.updateItem(args)),
   );
 
   return tools;

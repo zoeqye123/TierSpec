@@ -2,13 +2,11 @@ import process from 'node:process';
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 
+import { resolveRuntimeOptions } from './runtime-config.js';
 import { createTierSpecServer } from './server.js';
 
 async function main() {
-  const runtime = createTierSpecServer({
-    databasePath: process.env.TIERSPEC_MCP_DB_PATH,
-    actorUserId: process.env.TIERSPEC_MCP_ACTOR_ID,
-  });
+  const runtime = createTierSpecServer(resolveRuntimeOptions(process.env));
   const transport = new StdioServerTransport();
 
   let shuttingDown = false;

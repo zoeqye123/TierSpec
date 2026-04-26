@@ -1,3 +1,6 @@
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
+
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
@@ -6,6 +9,7 @@ import { MigrationRunner } from './db/migrate.js';
 import { createHierarchyTools, registerHierarchyTools, type HierarchyToolsOptions } from './tools/hierarchy.js';
 import { queryToolDefinitions, getItemTree, listItems, searchItems, registerQueryTools } from './tools/query.js';
 import { ensureWorkflowSchema, blockItem, transitionState } from './tools/workflow.js';
+import { createSprintTools, registerSprintTools, type SprintToolsOptions } from './tools/sprint.js';
 import { blockItemInputSchema, transitionStateInputSchema } from './schemas/workflow.js';
 
 export const SERVER_INFO = {
@@ -16,6 +20,7 @@ export const SERVER_INFO = {
 export const ALL_TOOL_NAMES = [
   'create_item',
   'get_item',
+  'update_item',
   'move_item',
   'reorder_items',
   'delete_item',
@@ -24,6 +29,9 @@ export const ALL_TOOL_NAMES = [
   'list_items',
   'transition_state',
   'block_item',
+  'create_sprint',
+  'assign_to_sprint',
+  'get_sprint_status',
 ] as const;
 
 const workflowToolDefinitions = {
@@ -85,12 +93,21 @@ function ensureActorUser(database: Database, actorUserId: string, actorName: str
     .run(actorUserId, actorName, actorEmail);
 }
 
+function ensureDatabasePath(databasePath: string) {
+  if (databasePath === ':memory:') {
+    return;
+  }
+
+  mkdirSync(dirname(databasePath), { recursive: true });
+}
+
 export function initializeDatabase({
   databasePath = ':memory:',
   actorUserId = 'system',
   actorName = 'TierSpec MCP Server',
   actorEmail = `${actorUserId}@tierspec.local`,
 }: Omit<TierSpecServerOptions, 'database'> = {}) {
+  ensureDatabasePath(databasePath);
   const database = Database.getInstance(databasePath);
 
   new MigrationRunner(database).up();
@@ -127,6 +144,10 @@ export function registerAllTools(server: McpServer, database: Database, actorUse
   } satisfies HierarchyToolsOptions);
   registerQueryTools(server, database);
   registerWorkflowTools(server, database, actorUserId);
+  registerSprintTools(server as Parameters<typeof registerSprintTools>[0], {
+    database,
+    actorUserId,
+  } satisfies SprintToolsOptions);
 
   return ALL_TOOL_NAMES;
 }
@@ -172,6 +193,7 @@ export function createTierSpecServer(options: TierSpecServerOptions = {}): TierS
 export {
   blockItem,
   createHierarchyTools,
+  createSprintTools,
   getItemTree,
   listItems,
   queryToolDefinitions,
