@@ -1,11 +1,14 @@
 import { z } from 'zod';
 
-import { ItemStatus, ItemType } from '../db/types.js';
+import { ItemType } from '../db/types.js';
+import { WORKFLOW_STATES } from '../state-machine.js';
+
+const workflowStatusSchema = z.enum(WORKFLOW_STATES);
 
 export const itemFilterSchemaShape = {
   parent_id: z.string().min(1).optional(),
   type: z.nativeEnum(ItemType).optional(),
-  status: z.nativeEnum(ItemStatus).optional(),
+  status: workflowStatusSchema.optional(),
 };
 
 export const itemFilterSchema = z.object(itemFilterSchemaShape);
@@ -29,7 +32,7 @@ export const searchItemsSchema = z.object(searchItemsSchemaShape);
 export const listItemsSchemaShape = {
   parent_id: z.string().min(1).optional(),
   type: z.nativeEnum(ItemType).optional(),
-  status: z.nativeEnum(ItemStatus).optional(),
+  status: workflowStatusSchema.optional(),
 };
 
 export const listItemsSchema = z.object(listItemsSchemaShape);

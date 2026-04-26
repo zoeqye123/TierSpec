@@ -21,12 +21,12 @@ const ALLOWED_TRANSITIONS: ReadonlyMap<Exclude<WorkflowState, 'blocked'>, readon
   ['requirement_review', ['backlog', 'needs_info']],
   ['needs_info', []],
   ['backlog', ['ai_decomposing']],
-  ['ai_decomposing', []],
-  ['in_progress', []],
-  ['waiting_for_test', []],
+  ['ai_decomposing', ['backlog']],
+  ['in_progress', ['waiting_for_test']],
+  ['waiting_for_test', ['testing']],
   ['testing', ['acceptance', 'in_progress']],
-  ['acceptance', []],
-  ['completed', []],
+  ['acceptance', ['completed', 'in_progress']],
+  ['completed', ['published']],
   ['published', []],
   ['cancelled', []],
 ]);
@@ -53,6 +53,10 @@ export function assertValidStateTransition(
   }
 
   if (newState === 'blocked') {
+    return;
+  }
+
+  if (newState === 'cancelled') {
     return;
   }
 
@@ -83,8 +87,12 @@ export function assertValidStateTransition(
 
 export function getAllowedTransitions(state: WorkflowState, previousState?: WorkflowState | null) {
   if (state === 'blocked') {
-    return previousState ? [previousState] : [];
+    return previousState ? [previousState, 'cancelled'] : ['cancelled'];
   }
 
-  return [...(ALLOWED_TRANSITIONS.get(state) ?? []), 'blocked'];
+  if (state === 'cancelled') {
+    return [];
+  }
+
+  return [...(ALLOWED_TRANSITIONS.get(state) ?? []), 'blocked', 'cancelled'];
 }

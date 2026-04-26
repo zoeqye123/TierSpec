@@ -70,7 +70,7 @@ function ensureItemWorkflowColumns(database: Database) {
     previous_state: 'TEXT',
     blocker_item_id: 'TEXT',
     blocker_reason: 'TEXT',
-    blocker_type: "TEXT DEFAULT 'dependency'",
+    blocker_type: 'TEXT',
     blocker_detected_at: 'TEXT',
     blocker_expected_resolution: 'TEXT',
   };
@@ -156,8 +156,10 @@ export function transitionState(database: Database, input: TransitionStateInput)
              previous_state = @previous_state,
              blocker_item_id = @blocker_item_id,
              blocker_reason = @blocker_reason,
-             blocker_detected_at = @blocker_detected_at,
-             updated_by = @updated_by
+             blocker_type = @blocker_type,
+              blocker_detected_at = @blocker_detected_at,
+             blocker_expected_resolution = @blocker_expected_resolution,
+              updated_by = @updated_by
          WHERE id = @id`,
       )
       .run({
@@ -166,7 +168,9 @@ export function transitionState(database: Database, input: TransitionStateInput)
         previous_state: isUnblock ? null : item.previous_state,
         blocker_item_id: isUnblock ? null : item.blocker_item_id,
         blocker_reason: isUnblock ? null : item.blocker_reason,
+        blocker_type: isUnblock ? null : item.blocker_type,
         blocker_detected_at: isUnblock ? null : item.blocker_detected_at,
+        blocker_expected_resolution: isUnblock ? null : item.blocker_expected_resolution,
         updated_by: parsed.actor_id,
       });
 
@@ -202,8 +206,10 @@ export function blockItem(database: Database, input: BlockItemInput): WorkflowIt
              previous_state = @previous_state,
              blocker_item_id = @blocker_item_id,
              blocker_reason = @blocker_reason,
-             blocker_detected_at = @blocker_detected_at,
-             updated_by = @updated_by
+             blocker_type = @blocker_type,
+              blocker_detected_at = @blocker_detected_at,
+             blocker_expected_resolution = @blocker_expected_resolution,
+              updated_by = @updated_by
          WHERE id = @id`,
       )
       .run({
@@ -211,7 +217,9 @@ export function blockItem(database: Database, input: BlockItemInput): WorkflowIt
         previous_state: previousState,
         blocker_item_id: parsed.blocker_id,
         blocker_reason: parsed.reason,
+        blocker_type: 'dependency',
         blocker_detected_at: blockedAt,
+        blocker_expected_resolution: null,
         updated_by: parsed.actor_id,
       });
 
