@@ -10,71 +10,136 @@ import SwiftData
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
-
+    @State private var selectedItem: TierItem?
+    @State private var searchText: String = ""
+    @State private var searchResults: [TierItem] = []
+    @State private var isSearching: Bool = false
+    @State private var navigationPath = NavigationPath()
+    
+    enum Destination: Hashable {
+        case sprints
+        case kanban
+    }
+    
     var body: some View {
-        NavigationViewWrapper {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
-                    }
-                }
-                .onDelete(perform: deleteItems)
-            }
-#if os(macOS)
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200)
-#endif
-            .toolbar {
-#if os(iOS)
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
-                }
-#endif
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
-                    }
-                }
-            }
-        }
-    }
-
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
-        }
-    }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
-            }
-        }
-    }
-}
-
-fileprivate struct NavigationViewWrapper<Content: View>: View {
-    let content: () -> Content
-
-    var body: some View {
-#if os(macOS)
         NavigationSplitView {
-            content()
+            VStack(spacing: 0) {
+                searchField
+                
+                Divider()
+                
+                List {
+                    Section("Hierarchy") {
+                        HierarchyTreeView(selectedItem: $selectedItem)
+                    }
+                    
+                    Section {
+                        NavigationLink(value: Destination.sprints) {
+                            Label("Sprints", systemImage: "calendar.badge.clock")
+                        }
+                        NavigationLink(value: Destination.kanban) {
+                            Label("Kanban Board", systemImage: "square.grid.3x3")
+                        }
+                    }
+                }
+                .listStyle(.sidebar)
+                .navigationTitle("TierSpec")
+                .navigationDestination(for: Destination.self) { destination in
+                    switch destination {
+                    case .sprints:
+                        SprintListView()
+                    case .kanban:
+                        KanbanView()
+                    }
+                }
+                .toolbar {
+                    ToolbarItem {
+                        Button(action: addCapability) {
+                            Label("Add Capability", systemImage: "plus")
+                        }
+                    }
+                }
+            }
         } detail: {
-            Text("Select an item")
+            if let selectedItem {
+                ItemDetailView(item: selectedItem)
+            } else {
+                ContentUnavailableView(
+                    "Select an Item",
+                    systemImage: "sidebar.left",
+                    description: Text("Choose a capability, feature, epic, story, or test case to inspect and edit it.")
+                )
+            }
         }
-#else
-        content()
-#endif
+        .onChange(of: searchText) { _, newValue in
+            performSearch(query: newValue)
+        }
+    }
+    
+    @ViewBuilder
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            
+            TextField("Search items...", text: $searchText)
+                .textFieldStyle(.plain)
+            
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(8)
+        .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+    }
+    
+    private func performSearch(query: String) {
+        guard !query.isEmpty else {
+            searchResults = []
+            return
+        }
+        
+        let descriptor = FetchDescriptor<TierItem>(
+            predicate: #Predicate { item in
+                item.deletedAt == nil &&
+                (item.title.localizedStandardContains(query) ||
+                 (item.itemDescription != nil && item.itemDescription!.localizedStandardContains(query)))
+            },
+            sortBy: [SortDescriptor(\TierItem.updatedAt, order: .reverse)]
+        )
+        
+        do {
+            searchResults = try modelContext.fetch(descriptor)
+        } catch {
+            searchResults = []
+        }
+    }
+    
+    private func addCapability() {
+        withAnimation {
+            let nextPosition = Double(Date().timeIntervalSince1970)
+            let capability = TierItem(
+                type: .capability,
+                title: "New Capability",
+                description: "Describe the business or technical capability.",
+                status: .requirement_input,
+                position: nextPosition
+            )
+            modelContext.insert(capability)
+            selectedItem = capability
+        }
     }
 }
 
 #Preview {
     ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
+        .modelContainer(for: TierItem.self, inMemory: true)
 }

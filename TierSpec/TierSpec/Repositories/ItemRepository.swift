@@ -219,12 +219,13 @@ actor ItemRepository {
     /// Reorder children within a parent
     func reorderChildren(of parent: TierItem, from sourceIndex: Int, to destinationIndex: Int) throws {
         guard var children = parent.children else { return }
-        guard sourceIndex < children.count && destinationIndex < children.count else {
+        guard sourceIndex < children.count && destinationIndex <= children.count else {
             throw RepositoryError.invalidIndex
         }
-        
+
         let movedItem = children.remove(at: sourceIndex)
-        children.insert(movedItem, at: destinationIndex)
+        let clampedDestination = min(destinationIndex, children.count)
+        children.insert(movedItem, at: clampedDestination)
         parent.children = children
         
         // Update positions

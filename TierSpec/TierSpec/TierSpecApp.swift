@@ -12,9 +12,21 @@ import SwiftData
 struct TierSpecApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
+            TierItem.self,
+            Sprint.self,
         ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+        let sharedStoreURL = URL(fileURLWithPath: "/Users/z/.tierspec/tierspec.db")
+        let sharedStoreDirectory = sharedStoreURL.deletingLastPathComponent()
+
+        if !FileManager.default.fileExists(atPath: sharedStoreDirectory.path) {
+            do {
+                try FileManager.default.createDirectory(at: sharedStoreDirectory, withIntermediateDirectories: true)
+            } catch {
+                fatalError("Could not create shared store directory: \(error)")
+            }
+        }
+
+        let modelConfiguration = ModelConfiguration(schema: schema, url: sharedStoreURL)
 
         do {
             return try ModelContainer(for: schema, configurations: [modelConfiguration])

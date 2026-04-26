@@ -87,11 +87,12 @@ final class TreeStore: ObservableObject {
     }
     
     private func moveRootNode(_ item: TierItem, from sourceIndex: Int, to destinationIndex: Int) async {
-        guard sourceIndex < rootItems.count, destinationIndex < rootItems.count else { return }
+        guard sourceIndex < rootItems.count, destinationIndex <= rootItems.count else { return }
         
         var items = rootItems
         let movedItem = items.remove(at: sourceIndex)
-        items.insert(movedItem, at: destinationIndex)
+        let clampedDestination = min(destinationIndex, items.count)
+        items.insert(movedItem, at: clampedDestination)
         
         for (index, item) in items.enumerated() {
             item.position = Double(index)
