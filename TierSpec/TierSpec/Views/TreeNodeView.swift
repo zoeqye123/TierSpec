@@ -7,58 +7,42 @@
 
 import SwiftUI
 
-/// A single node in the hierarchy tree with lazy-loaded children
 struct TreeNodeView: View {
-    // MARK: - Properties
-    
-    /// The item to display
     let item: TierItem
-    
-    /// Closure to fetch children lazily
     let loadChildren: (TierItem) -> [TierItem]
-    
-    /// Currently selected item
     @Binding var selectedItem: TierItem?
     
-    /// Local expansion state
+    let onAddChild: (TierItem, ItemType) -> Void
+    let onDelete: (TierItem) -> Void
+    
     @State private var isExpanded: Bool = false
-    
-    /// Cached children (loaded lazily)
-    @State private var children: [TierItem] = []
-    
-    /// Whether children have been loaded
-    @State private var childrenLoaded: Bool = false
-    
-    // MARK: - Body
+    @State private var showAddMenu: Bool = false
+
+    private var loadedChildren: [TierItem] {
+        isExpanded ? loadChildren(item) : []
+    }
     
     var body: some View {
         if item.canHaveChildren {
             DisclosureGroup(
                 isExpanded: $isExpanded,
                 content: {
-                    if childrenLoaded {
-                        ForEach(children) { child in
+                    if isExpanded {
+                        ForEach(loadedChildren) { child in
                             TreeNodeView(
                                 item: child,
                                 loadChildren: loadChildren,
-                                selectedItem: $selectedItem
+                                selectedItem: $selectedItem,
+                                onAddChild: onAddChild,
+                                onDelete: onDelete
                             )
                         }
-                    } else {
-                        ProgressView()
-                            .scaleEffect(0.5)
-                            .padding(.leading, 20)
                     }
                 },
                 label: {
                     nodeLabel
                 }
             )
-            .onChange(of: isExpanded) { _, newValue in
-                if newValue && !childrenLoaded {
-                    loadChildrenLazy()
-                }
-            }
         } else {
             nodeLabel
         }
@@ -98,6 +82,27 @@ struct TreeNodeView: View {
         .contentShape(Rectangle())
         .onTapGesture {
             selectedItem = item
+        }
+        .contextMenu {
+            if item.canHaveChildren {
+                Menu("Add Child") {
+                    ForEach(item.type.allowedChildTypes, id: \.self) { childType in
+                        Button {
+                            onAddChild(item, childType)
+                        } label: {
+                            Label(childType.displayName, systemImage: childType.icon)
+                        }
+                    }
+                }
+            }
+            
+            Divider()
+            
+            Button(role: .destructive) {
+                onDelete(item)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
         }
     }
     
@@ -144,21 +149,9 @@ struct TreeNodeView: View {
             return .cyan
         }
     }
-    
-    // MARK: - Lazy Loading
-    
-    private func loadChildrenLazy() {
-        print("[TreeNodeView] Lazy loading children for: \(item.title)")
-        children = loadChildren(item)
-        childrenLoaded = true
-        print("[TreeNodeView] Loaded \(children.count) children")
-    }
 }
 
-// MARK: - Preview Data Helper
-
 extension TreeNodeView {
-    /// Create a sample item for previews
     static func makeSampleItem(
         type: ItemType,
         title: String,

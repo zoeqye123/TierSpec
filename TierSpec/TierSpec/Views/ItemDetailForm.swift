@@ -7,10 +7,7 @@
 
 import SwiftUI
 
-/// Form for editing item details with validation
 struct ItemDetailForm: View {
-    // MARK: - Bindings
-    
     @Binding var title: String
     @Binding var description: String
     @Binding var status: ItemStatus
@@ -19,34 +16,19 @@ struct ItemDetailForm: View {
     @Binding var complexity: Complexity?
     @Binding var validationError: String?
     
-    // MARK: - Focus State
+    let originalStatus: ItemStatus
     
     @FocusState private var focusedField: Field?
     
-    // MARK: - Private State
-    
     @State private var hasStoryPoints: Bool = false
-    
-    // MARK: - Body
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // Title field (required)
             titleField
-            
-            // Description field
             descriptionField
-            
-            // Status picker
             statusPicker
-            
-            // Priority slider
             priorityField
-            
-            // Story points
             storyPointsField
-            
-            // Complexity picker
             complexityPicker
         }
         .onAppear {
@@ -106,18 +88,32 @@ struct ItemDetailForm: View {
                 .fontWeight(.medium)
             
             Picker("Status", selection: $status) {
-                ForEach(ItemStatus.allCases, id: \.self) { status in
+                ForEach(allowedStatuses, id: \.self) { s in
                     HStack(spacing: 6) {
                         Circle()
-                            .fill(status.color)
+                            .fill(s.color)
                             .frame(width: 8, height: 8)
-                        Text(status.displayName)
+                        Text(s.displayName)
                     }
-                    .tag(status)
+                    .tag(s)
                 }
             }
             .pickerStyle(.menu)
+            
+            if status != originalStatus {
+                Text("Transition: \(originalStatus.displayName) → \(status.displayName)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
+    }
+    
+    private var allowedStatuses: [ItemStatus] {
+        let allowed = StateMachine.allowedTransitions(from: originalStatus)
+        if !allowed.contains(originalStatus) {
+            return [originalStatus] + allowed
+        }
+        return allowed
     }
     
     // MARK: - Priority Field
@@ -277,7 +273,8 @@ struct ItemDetailFormPreview: View {
                 priority: $priority,
                 storyPoints: $storyPoints,
                 complexity: $complexity,
-                validationError: $validationError
+                validationError: $validationError,
+                originalStatus: .in_progress
             )
         }
         .formStyle(.grouped)

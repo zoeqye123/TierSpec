@@ -6,145 +6,128 @@
 //
 
 import SwiftUI
-import SwiftData
 
-// MARK: - TreeNodeView Previews
+// MARK: - Preview Helpers
 
-#Preview("Single Node - Capability") {
-    let item = TierItem(
-        type: .capability,
-        title: "User Management",
-        status: .in_progress
-    )
-    
-    return List {
-        TreeNodeView(
-            item: item,
-            loadChildren: { _ in [] },
-            selectedItem: .constant(nil)
+private enum TreeNodePreviewFactory {
+    static func singleCapability() -> TierItem {
+        TierItem(
+            type: .capability,
+            title: "User Management",
+            status: .in_progress
         )
     }
-    .listStyle(.sidebar)
-    .frame(width: 300, height: 200)
+
+    static func singleStory() -> TierItem {
+        TierItem(
+            type: .business_story,
+            title: "As a user, I want to reset my password",
+            status: .backlog,
+            aiGenerated: true,
+            aiConfidence: 0.85
+        )
+    }
+
+    static func hierarchyRoot() -> TierItem {
+        let capability = TierItem(type: .capability, title: "E-Commerce Platform", status: .in_progress)
+        let feature = TierItem(type: .feature, title: "Shopping Cart", status: .backlog)
+        let epic = TierItem(type: .epic, title: "Cart Management", status: .requirement_input)
+        let story = TierItem(type: .business_story, title: "Add items to cart", status: .backlog, aiGenerated: true)
+        let testCase = TierItem(type: .test_case, title: "Verify cart total calculation", status: .backlog)
+
+        feature.parent = capability
+        epic.parent = feature
+        story.parent = epic
+        testCase.parent = story
+
+        capability.children = [feature]
+        feature.children = [epic]
+        epic.children = [story]
+        story.children = [testCase]
+
+        return capability
+    }
+
+    static func multipleCapabilities() -> [TierItem] {
+        let auth = TierItem(type: .capability, title: "User Authentication", status: .completed)
+        let login = TierItem(type: .feature, title: "Login", status: .completed)
+        login.parent = auth
+        auth.children = [login]
+
+        let payment = TierItem(type: .capability, title: "Payment Processing", status: .in_progress)
+        let card = TierItem(type: .feature, title: "Credit Card", status: .testing)
+        card.parent = payment
+        payment.children = [card]
+
+        let inventory = TierItem(type: .capability, title: "Inventory Management", status: .backlog)
+
+        return [auth, payment, inventory]
+    }
+
+    static func statusItems() -> [TierItem] {
+        let statuses: [ItemStatus] = [
+            .requirement_input, .requirement_review, .needs_info, .backlog,
+            .ai_decomposing, .in_progress, .waiting_for_test, .testing,
+            .acceptance, .completed, .published, .blocked, .cancelled,
+        ]
+
+        return statuses.enumerated().map { index, status in
+            TierItem(
+                type: index.isMultiple(of: 2) ? .capability : .feature,
+                title: "\(status.displayName) Item",
+                status: status
+            )
+        }
+    }
+}
+
+private struct PreviewTreeList: View {
+    let items: [TierItem]
+    
+    var body: some View {
+        List {
+            ForEach(items) { item in
+                TreeNodeView(
+                    item: item,
+                    loadChildren: { $0.outlineChildren },
+                    selectedItem: .constant(nil),
+                    onAddChild: { _, _ in },
+                    onDelete: { _ in }
+                )
+            }
+        }
+        .listStyle(.sidebar)
+    }
+}
+
+// MARK: - Previews
+
+#Preview("Single Node - Capability") {
+    PreviewTreeList(items: [TreeNodePreviewFactory.singleCapability()])
+        .frame(width: 300, height: 200)
 }
 
 #Preview("Single Node - Story with AI") {
-    let item = TierItem(
-        type: .business_story,
-        title: "As a user, I want to reset my password",
-        status: .backlog,
-        aiGenerated: true,
-        aiConfidence: 0.85
-    )
-    
-    return List {
-        TreeNodeView(
-            item: item,
-            loadChildren: { _ in [] },
-            selectedItem: .constant(nil)
-        )
-    }
-    .listStyle(.sidebar)
-    .frame(width: 400, height: 200)
+    PreviewTreeList(items: [TreeNodePreviewFactory.singleStory()])
+        .frame(width: 400, height: 200)
 }
 
 #Preview("Hierarchy - 5 Levels") {
-    let container = try! ModelContainer(
-        for: TierItem.self,
-        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
-    )
-    
-    let context = container.mainContext
-    
-    let capability = TierItem(type: .capability, title: "E-Commerce Platform", status: .in_progress)
-    context.insert(capability)
-    
-    let feature = TierItem(type: .feature, title: "Shopping Cart", status: .backlog)
-    feature.parent = capability
-    capability.children?.append(feature)
-    context.insert(feature)
-    
-    let epic = TierItem(type: .epic, title: "Cart Management", status: .requirement_input)
-    epic.parent = feature
-    feature.children?.append(epic)
-    context.insert(epic)
-    
-    let story = TierItem(type: .business_story, title: "Add items to cart", status: .backlog, aiGenerated: true)
-    story.parent = epic
-    epic.children?.append(story)
-    context.insert(story)
-    
-    let testCase = TierItem(type: .test_case, title: "Verify cart total calculation", status: .backlog)
-    testCase.parent = story
-    story.children?.append(testCase)
-    context.insert(testCase)
-    
-    return HierarchyTreeView()
-        .modelContainer(container)
+    PreviewTreeList(items: [TreeNodePreviewFactory.hierarchyRoot()])
         .frame(width: 400, height: 500)
 }
 
 #Preview("Multiple Capabilities") {
-    let container = try! ModelContainer(
-        for: TierItem.self,
-        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
-    )
-    
-    let context = container.mainContext
-    
-    let cap1 = TierItem(type: .capability, title: "User Authentication", status: .completed)
-    context.insert(cap1)
-    
-    let feature1 = TierItem(type: .feature, title: "Login", status: .completed)
-    feature1.parent = cap1
-    cap1.children?.append(feature1)
-    context.insert(feature1)
-    
-    let cap2 = TierItem(type: .capability, title: "Payment Processing", status: .in_progress)
-    context.insert(cap2)
-    
-    let feature2 = TierItem(type: .feature, title: "Credit Card", status: .testing)
-    feature2.parent = cap2
-    cap2.children?.append(feature2)
-    context.insert(feature2)
-    
-    let cap3 = TierItem(type: .capability, title: "Inventory Management", status: .backlog)
-    context.insert(cap3)
-    
-    return HierarchyTreeView()
-        .modelContainer(container)
+    PreviewTreeList(items: TreeNodePreviewFactory.multipleCapabilities())
         .frame(width: 400, height: 400)
 }
 
 #Preview("All Status Types") {
-    let container = try! ModelContainer(
-        for: TierItem.self,
-        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
-    )
-    
-    let context = container.mainContext
-    let statuses: [ItemStatus] = [
-        .requirement_input, .requirement_review, .needs_info, .backlog,
-        .ai_decomposing, .in_progress, .waiting_for_test, .testing,
-        .acceptance, .completed, .published, .blocked, .cancelled
-    ]
-    
-    for (index, status) in statuses.enumerated() {
-        let item = TierItem(
-            type: index % 2 == 0 ? .capability : .feature,
-            title: "\(status.displayName) Item",
-            status: status
-        )
-        context.insert(item)
-    }
-    
-    return HierarchyTreeView()
-        .modelContainer(container)
+    PreviewTreeList(items: TreeNodePreviewFactory.statusItems())
         .frame(width: 400, height: 600)
 }
 
 #Preview("Empty State") {
-    HierarchyTreeView()
-        .modelContainer(for: TierItem.self, inMemory: true)
+    PreviewTreeList(items: [])
         .frame(width: 300, height: 300)
 }

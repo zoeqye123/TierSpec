@@ -8,18 +8,23 @@
 import SwiftUI
 import SwiftData
 
-/// A lazy-loading hierarchical tree view for TierSpec items
 struct HierarchyTreeView: View {
+    @Query(sort: \TierItem.position)
+    private var allItems: [TierItem]
     
     @Environment(\.modelContext) private var modelContext
-    @Query(
-        filter: #Predicate<TierItem> { $0.parent == nil && $0.type == .capability },
-        sort: \TierItem.position
-    )
-    private var rootItems: [TierItem]
     
-    @State private var selectedItem: TierItem?
-    @State private var expandedItemIDs: Set<UUID> = []
+    @Binding var selectedItem: TierItem?
+    
+    init(selectedItem: Binding<TierItem?>) {
+        self._selectedItem = selectedItem
+    }
+    
+    private var rootItems: [TierItem] {
+        allItems.filter { item in
+            item.parent == nil && item.type == .capability && item.deletedAt == nil
+        }
+    }
     
     var body: some View {
         List {
@@ -30,7 +35,9 @@ struct HierarchyTreeView: View {
                     TreeNodeView(
                         item: item,
                         loadChildren: loadChildren,
-                        selectedItem: $selectedItem
+                        selectedItem: $selectedItem,
+                        onAddChild: addChild,
+                        onDelete: deleteItem
                     )
                 }
             }
@@ -59,16 +66,40 @@ struct HierarchyTreeView: View {
     }
     
     private func loadChildren(_ item: TierItem) -> [TierItem] {
-        print("[HierarchyTreeView] Loading children for: \(item.title) (type: \(item.type.displayName))")
-        let children = item.outlineChildren
-        print("[HierarchyTreeView] Found \(children.count) children")
-        return children
+        item.outlineChildren
+    }
+    
+    private func addChild(to parent: TierItem, type: ItemType) {
+        withAnimation {
+            let nextPosition = Double(parent.children?.count ?? 0)
+            let child = TierItem(
+                type: type,
+                title: "New \(type.displayName)",
+                description: nil,
+                status: .requirement_input,
+                position: nextPosition
+            )
+            child.parent = parent
+            if parent.children == nil {
+                parent.children = []
+            }
+            parent.children?.append(child)
+            modelContext.insert(child)
+            selectedItem = child
+        }
+    }
+    
+    private func deleteItem(_ item: TierItem) {
+        withAnimation {
+            item.softDelete()
+            if selectedItem?.id == item.id {
+                selectedItem = nil
+            }
+        }
     }
 }
 
-// MARK: - Preview
-
 #Preview {
-    HierarchyTreeView()
+    HierarchyTreeView(selectedItem: .constant(nil))
         .modelContainer(for: TierItem.self, inMemory: true)
 }

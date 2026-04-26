@@ -53,7 +53,8 @@ struct ItemDetailView: View {
                         priority: $draftPriority,
                         storyPoints: $draftStoryPoints,
                         complexity: $draftComplexity,
-                        validationError: $validationError
+                        validationError: $validationError,
+                        originalStatus: item.status
                     )
                     
                     Divider()
@@ -274,13 +275,20 @@ struct ItemDetailView: View {
     }
     
     private func saveChanges() {
-        // Validate
         guard draftTitle.count >= 5 else {
             validationError = "Title must be at least 5 characters"
             return
         }
         
-        // Apply changes to item
+        if draftStatus != item.status {
+            do {
+                try StateMachine.assertValidTransition(from: item.status, to: draftStatus)
+            } catch {
+                validationError = error.localizedDescription
+                return
+            }
+        }
+        
         item.title = draftTitle
         item.itemDescription = draftDescription.isEmpty ? nil : draftDescription
         item.status = draftStatus
@@ -289,7 +297,6 @@ struct ItemDetailView: View {
         item.complexity = draftComplexity
         item.touch()
         
-        // Exit edit mode
         isEditing = false
         validationError = nil
     }
