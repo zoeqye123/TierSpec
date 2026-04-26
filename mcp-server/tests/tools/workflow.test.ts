@@ -110,4 +110,104 @@ describe('workflow tools', () => {
       }),
     ).toThrow(/reason is required/i);
   });
+
+  it('transition_state allows the documented forward and recovery transitions', () => {
+    const item = insertItem(testDb.database, {
+      id: 'item-flow',
+      type: ItemType.Capability,
+      title: 'Workflow item',
+    });
+
+    testDb.database.prepare('UPDATE items SET status = ?, updated_by = ? WHERE id = ?').run('ai_decomposing', 'user-1', item.id);
+    expect(
+      transitionState(testDb.database, {
+        item_id: item.id,
+        new_state: 'backlog',
+        actor_id: 'user-1',
+      }).status,
+    ).toBe('backlog');
+
+    testDb.database.prepare('UPDATE items SET status = ?, updated_by = ? WHERE id = ?').run('in_progress', 'user-1', item.id);
+    expect(
+      transitionState(testDb.database, {
+        item_id: item.id,
+        new_state: 'waiting_for_test',
+        actor_id: 'user-1',
+      }).status,
+    ).toBe('waiting_for_test');
+
+    expect(
+      transitionState(testDb.database, {
+        item_id: item.id,
+        new_state: 'testing',
+        actor_id: 'user-1',
+      }).status,
+    ).toBe('testing');
+
+    testDb.database.prepare('UPDATE items SET status = ?, updated_by = ? WHERE id = ?').run('acceptance', 'user-1', item.id);
+    expect(
+      transitionState(testDb.database, {
+        item_id: item.id,
+        new_state: 'completed',
+        actor_id: 'user-1',
+      }).status,
+    ).toBe('completed');
+
+    expect(
+      transitionState(testDb.database, {
+        item_id: item.id,
+        new_state: 'published',
+        actor_id: 'user-1',
+      }).status,
+    ).toBe('published');
+  });
+
+  it('transition_state allows cancelling from any workflow state', () => {
+    const item = insertItem(testDb.database, {
+      id: 'item-cancel',
+      type: ItemType.Capability,
+      title: 'Cancelable item',
+    });
+
+    testDb.database.prepare('UPDATE items SET status = ?, updated_by = ? WHERE id = ?').run('published', 'user-1', item.id);
+
+    const updated = transitionState(testDb.database, {
+      item_id: item.id,
+      new_state: 'cancelled',
+      actor_id: 'user-1',
+    });
+
+    expect(updated.status).toBe('cancelled');
+  });
+
+  it('unblocking clears all blocker metadata', () => {
+    const item = insertItem(testDb.database, {
+      id: 'item-unblock',
+      type: ItemType.Capability,
+      title: 'Unblock item',
+    });
+
+    testDb.database.prepare('UPDATE items SET status = ?, updated_by = ? WHERE id = ?').run('testing', 'user-1', item.id);
+
+    blockItem(testDb.database, {
+      item_id: item.id,
+      blocker_id: 'dep-123',
+      reason: 'Waiting on dependency',
+      actor_id: 'user-1',
+    });
+
+    const unblocked = transitionState(testDb.database, {
+      item_id: item.id,
+      new_state: 'testing',
+      actor_id: 'user-1',
+    });
+
+    expect(unblocked.status).toBe('testing');
+    expect(unblocked.previous_state).toBeNull();
+    expect(unblocked.blocker_item_id).toBeNull();
+    expect(unblocked.blocker_reason).toBeNull();
+    expect(unblocked.blocker_type).toBeNull();
+    expect(unblocked.blocker_detected_at).toBeNull();
+    expect(unblocked.blocker_expected_resolution).toBeNull();
+  });
 });

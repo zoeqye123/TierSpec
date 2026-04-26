@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { ItemStatus, ItemType } from '../../src/db/types.js';
+import { ItemType } from '../../src/db/types.js';
 import { getItemTree, listItems, queryToolDefinitions, searchItems } from '../../src/tools/query.js';
 import { createTestDatabase, insertItem, insertUser } from '../db/test-helpers.js';
 
@@ -160,10 +160,24 @@ describe('query tools', () => {
     insertItem(testDb.database, { id: 'cap-1', type: ItemType.Capability, title: 'Platform' });
     insertItem(testDb.database, { id: 'cap-2', type: ItemType.Capability, title: 'Billing' });
 
-    testDb.database.prepare('UPDATE items SET status = ?, updated_by = ? WHERE id = ?').run(ItemStatus.Done, 'user-1', 'cap-2');
+    testDb.database.prepare('UPDATE items SET status = ?, updated_by = ? WHERE id = ?').run('completed', 'user-1', 'cap-2');
 
-    const items = listItems(testDb.database, { status: ItemStatus.Done });
+    const items = listItems(testDb.database, { status: 'completed' });
 
     expect(items.map((item) => item.id)).toEqual(['cap-2']);
+  });
+
+  it('search_items accepts documented workflow statuses in filters', () => {
+    insertItem(testDb.database, { id: 'cap-1', type: ItemType.Capability, title: 'Platform' });
+    insertItem(testDb.database, { id: 'cap-2', type: ItemType.Capability, title: 'Billing' });
+
+    testDb.database.prepare('UPDATE items SET status = ?, updated_by = ? WHERE id = ?').run('waiting_for_test', 'user-1', 'cap-2');
+
+    const result = searchItems(testDb.database, {
+      query: 'billing',
+      filters: { status: 'waiting_for_test' },
+    });
+
+    expect(result.items.map((item) => item.id)).toEqual(['cap-2']);
   });
 });

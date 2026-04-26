@@ -28,9 +28,12 @@ describe('MigrationRunner', () => {
       .all() as Array<{ name: string }>;
 
     expect(tables.map((table) => table.name)).toEqual([
+      'audit_events',
       'item_parent_history',
       'item_paths',
       'items',
+      'sprint_assignments',
+      'sprints',
       'users',
     ]);
   });
@@ -74,9 +77,12 @@ describe('MigrationRunner', () => {
     const users = testDb.database.prepare('SELECT COUNT(*) AS count FROM users').get() as { count: number };
 
     expect(tables.map((table) => table.name)).toEqual([
+      'audit_events',
       'item_parent_history',
       'item_paths',
       'items',
+      'sprint_assignments',
+      'sprints',
       'users',
     ]);
     expect(users.count).toBe(0);
@@ -107,11 +113,36 @@ describe('MigrationRunner', () => {
       .all() as Array<{ name: string }>;
 
     expect(tables.map((table) => table.name)).toEqual([
+      'audit_events',
       'item_parent_history',
       'item_paths',
       'items',
+      'sprint_assignments',
+      'sprints',
       'users',
     ]);
+  });
+
+  it('migration up includes workflow columns on items', () => {
+    const testDb = createTestDatabase();
+    cleanupFns.push(() => testDb.cleanup());
+
+    testDb.migrations.up();
+
+    const columns = testDb.database
+      .prepare('PRAGMA table_info(items)')
+      .all() as Array<{ name: string }>;
+
+    expect(columns.map((column) => column.name)).toEqual(
+      expect.arrayContaining([
+        'previous_state',
+        'blocker_item_id',
+        'blocker_reason',
+        'blocker_type',
+        'blocker_detected_at',
+        'blocker_expected_resolution',
+      ]),
+    );
   });
 
   it('returns isolated in-memory connections and reuses file-backed ones safely', () => {

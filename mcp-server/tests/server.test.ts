@@ -32,7 +32,7 @@ describe('MCP server integration', () => {
     void runtime.close();
   });
 
-  it('registers all 10 tools over the MCP protocol', async () => {
+  it('registers all 14 tools over the MCP protocol', async () => {
     const runtime = createTierSpecServer({
       database: testDb.database,
       actorUserId: 'user-1',
@@ -44,7 +44,7 @@ describe('MCP server integration', () => {
 
     const listed = await client.listTools();
 
-    expect(listed.tools).toHaveLength(10);
+    expect(listed.tools).toHaveLength(14);
     expect(listed.tools.map((tool) => tool.name).sort()).toEqual([...ALL_TOOL_NAMES].sort());
 
     await Promise.all([client.close(), runtime.close()]);

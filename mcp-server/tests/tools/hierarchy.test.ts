@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { createHierarchyTools } from '../../src/tools/hierarchy.js';
-import { ItemType } from '../../src/db/types.js';
+import { Complexity, ItemType, ItemStatus } from '../../src/db/types.js';
 import { createTestDatabase, insertItem, insertUser } from '../db/test-helpers.js';
 
 let testDb: ReturnType<typeof createTestDatabase>;
@@ -232,6 +232,37 @@ describe('hierarchy CRUD tools', () => {
     expect(deleted.deleted_at).toBeTruthy();
   });
 
+  it('delete_item without cascade rejects items that still have active descendants', () => {
+    const capability = insertItem(testDb.database, {
+      id: 'cap-1',
+      type: ItemType.Capability,
+      title: 'Capability',
+    });
+    const feature = insertItem(testDb.database, {
+      id: 'feature-1',
+      type: ItemType.Feature,
+      parent_id: capability.id,
+      title: 'Feature',
+    });
+    insertItem(testDb.database, {
+      id: 'epic-1',
+      type: ItemType.Epic,
+      parent_id: feature.id,
+      title: 'Epic',
+    });
+
+    const tools = createHierarchyTools({
+      database: testDb.database,
+      actorUserId: 'user-1',
+    });
+
+    expect(() => tools.deleteItem({ item_id: feature.id })).toThrow(/cascade_children=true/i);
+
+    const tree = tools.getItem({ id: capability.id });
+    expect(tree.children.map((item) => item.id)).toEqual([feature.id]);
+    expect(tree.children[0]?.children.map((item) => item.id)).toEqual(['epic-1']);
+  });
+
   it('delete_item cascade deletes children', () => {
     const capability = insertItem(testDb.database, {
       id: 'cap-1',
@@ -266,5 +297,144 @@ describe('hierarchy CRUD tools', () => {
       { id: 'epic-1', deleted_at: expect.any(String) },
       { id: 'feature-1', deleted_at: expect.any(String) },
     ]);
+  });
+
+  it('update_item updates title and description', () => {
+    const capability = insertItem(testDb.database, {
+      id: 'cap-1',
+      type: ItemType.Capability,
+      title: 'Original Title',
+      description: 'Original description',
+    });
+
+    const tools = createHierarchyTools({
+      database: testDb.database,
+      actorUserId: 'user-1',
+    });
+
+    const updated = tools.updateItem({
+      item_id: capability.id,
+      title: 'Updated Title',
+      description: 'Updated description',
+    });
+
+    expect(updated.title).toBe('Updated Title');
+    expect(updated.description).toBe('Updated description');
+  });
+
+  it('update_item updates status and priority', () => {
+    const capability = insertItem(testDb.database, {
+      id: 'cap-1',
+      type: ItemType.Capability,
+      title: 'Capability',
+      status: ItemStatus.Backlog,
+      priority: 0,
+    });
+
+    const tools = createHierarchyTools({
+      database: testDb.database,
+      actorUserId: 'user-1',
+    });
+
+    const updated = tools.updateItem({
+      item_id: capability.id,
+      status: ItemStatus.InProgress,
+      priority: 50,
+    });
+
+    expect(updated.status).toBe(ItemStatus.InProgress);
+    expect(updated.priority).toBe(50);
+  });
+
+  it('update_item updates story_points and complexity', () => {
+    const capability = insertItem(testDb.database, {
+      id: 'cap-1',
+      type: ItemType.Capability,
+      title: 'Capability',
+    });
+    const feature = insertItem(testDb.database, {
+      id: 'feature-1',
+      type: ItemType.Feature,
+      parent_id: capability.id,
+      title: 'Feature',
+    });
+    const epic = insertItem(testDb.database, {
+      id: 'epic-1',
+      type: ItemType.Epic,
+      parent_id: feature.id,
+      title: 'Epic',
+    });
+
+    const tools = createHierarchyTools({
+      database: testDb.database,
+      actorUserId: 'user-1',
+    });
+
+    const updated = tools.updateItem({
+      item_id: epic.id,
+      story_points: 13,
+      complexity: Complexity.L,
+    });
+
+    expect(updated.story_points).toBe(13);
+    expect(updated.complexity).toBe(Complexity.L);
+  });
+
+  it('update_item updates labels', () => {
+    const capability = insertItem(testDb.database, {
+      id: 'cap-1',
+      type: ItemType.Capability,
+      title: 'Capability',
+    });
+
+    const tools = createHierarchyTools({
+      database: testDb.database,
+      actorUserId: 'user-1',
+    });
+
+    const updated = tools.updateItem({
+      item_id: capability.id,
+      labels: ['backend', 'api', 'priority'],
+    });
+
+    expect(updated.labels).toEqual(['backend', 'api', 'priority']);
+  });
+
+  it('update_item can clear nullable fields', () => {
+    const capability = insertItem(testDb.database, {
+      id: 'cap-1',
+      type: ItemType.Capability,
+      title: 'Capability',
+      description: 'Has description',
+      story_points: 5,
+    });
+
+    const tools = createHierarchyTools({
+      database: testDb.database,
+      actorUserId: 'user-1',
+    });
+
+    const updated = tools.updateItem({
+      item_id: capability.id,
+      description: null,
+      story_points: null,
+    });
+
+    expect(updated.description).toBeNull();
+    expect(updated.story_points).toBeNull();
+  });
+
+  it('update_item throws for non-existent item', () => {
+    const tools = createHierarchyTools({
+      database: testDb.database,
+      actorUserId: 'user-1',
+    });
+
+    expect(() =>
+      tools.updateItem({
+        item_id: 'non-existent',
+        title: 'New Title',
+      }),
+    ).toThrow(/not found/i);
   });
 });
