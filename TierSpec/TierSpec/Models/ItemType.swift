@@ -89,7 +89,11 @@ enum ItemType: String, Codable, CaseIterable {
     var canBeRoot: Bool {
         return self == .capability
     }
-    
+
+    var canHaveChildren: Bool {
+        return !allowedChildTypes.isEmpty
+    }
+
     /// Whether this is a story type (business or technical)
     var isStoryType: Bool {
         return self == .business_story || self == .technical_story

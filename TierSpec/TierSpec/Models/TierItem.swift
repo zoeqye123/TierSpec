@@ -23,11 +23,13 @@ final class TierItem {
     // MARK: - Hierarchy Relationships
     
     /// Parent item (nil for root capabilities)
-    @Relationship(inverse: \TierItem.children)
-    var parent: TierItem?
+    var parent: TierItem? = nil
     
     /// Child items
-    var children: [TierItem]?
+    @Relationship(inverse: \TierItem.parent)
+    var children: [TierItem]? = []
+    
+    var sprint: Sprint?
     
     // MARK: - Content
     
@@ -113,7 +115,6 @@ final class TierItem {
         self.labels = labels
         self.createdAt = Date()
         self.updatedAt = Date()
-        self.children = []
     }
     
     // MARK: - Computed Properties
@@ -187,6 +188,18 @@ final class TierItem {
     }
 }
 
+extension Complexity {
+    var color: SwiftUI.Color {
+        switch self {
+        case .xs: return .green
+        case .s: return .mint
+        case .m: return .yellow
+        case .l: return .orange
+        case .xl: return .red
+        }
+    }
+}
+
 // MARK: - Complexity Enum
 
 /// Complexity levels for estimation
@@ -207,16 +220,6 @@ enum Complexity: String, Codable, CaseIterable {
         }
     }
     
-    var color: Color {
-        switch self {
-        case .xs: return .green
-        case .s: return .mint
-        case .m: return .yellow
-        case .l: return .orange
-        case .xl: return .red
-        }
-    }
-    
     var defaultStoryPoints: Int {
         switch self {
         case .xs: return 1
@@ -225,21 +228,5 @@ enum Complexity: String, Codable, CaseIterable {
         case .l: return 5
         case .xl: return 8
         }
-    }
-}
-
-// MARK: - Identifiable Conformance
-
-extension TierItem: Identifiable {}
-
-// MARK: - Hashable Conformance
-
-extension TierItem: Hashable {
-    static func == (lhs: TierItem, rhs: TierItem) -> Bool {
-        lhs.id == rhs.id
-    }
-    
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
     }
 }
