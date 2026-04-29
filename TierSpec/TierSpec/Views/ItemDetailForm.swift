@@ -17,6 +17,7 @@ struct ItemDetailForm: View {
     @Binding var validationError: String?
     
     let originalStatus: ItemStatus
+    let actorType: ActorType
     
     @FocusState private var focusedField: Field?
     
@@ -109,7 +110,7 @@ struct ItemDetailForm: View {
     }
     
     private var allowedStatuses: [ItemStatus] {
-        let allowed = StateMachine.allowedTransitions(from: originalStatus)
+        let allowed = StateMachine.allowedTransitions(from: originalStatus, actorType: actorType)
         if !allowed.contains(originalStatus) {
             return [originalStatus] + allowed
         }
@@ -274,7 +275,8 @@ struct ItemDetailFormPreview: View {
                 storyPoints: $storyPoints,
                 complexity: $complexity,
                 validationError: $validationError,
-                originalStatus: .in_progress
+                originalStatus: .in_progress,
+                actorType: .human
             )
         }
         .formStyle(.grouped)

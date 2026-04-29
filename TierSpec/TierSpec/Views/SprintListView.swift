@@ -12,7 +12,10 @@ struct SprintListView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Sprint.startDate) private var sprints: [Sprint]
     @State private var showingCreateSprint = false
+    @State private var editingSprint: Sprint?
     @State private var selectedSprint: Sprint?
+    @State private var sprintPendingDelete: Sprint?
+    @State private var showingDeleteConfirmation = false
     
     var body: some View {
         NavigationStack {
@@ -25,6 +28,20 @@ struct SprintListView: View {
                             .contentShape(Rectangle())
                             .onTapGesture {
                                 selectedSprint = sprint
+                            }
+                            .contextMenu {
+                                Button {
+                                    editingSprint = sprint
+                                } label: {
+                                    Label("Edit Sprint", systemImage: "pencil")
+                                }
+
+                                Button(role: .destructive) {
+                                    sprintPendingDelete = sprint
+                                    showingDeleteConfirmation = true
+                                } label: {
+                                    Label("Delete Sprint", systemImage: "trash")
+                                }
                             }
                     }
                     .onDelete(perform: deleteSprints)
@@ -41,10 +58,27 @@ struct SprintListView: View {
                 }
             }
             .sheet(isPresented: $showingCreateSprint) {
-                CreateSprintView()
+                SprintFormView()
+            }
+            .sheet(item: $editingSprint) { sprint in
+                SprintFormView(sprint: sprint)
             }
             .sheet(item: $selectedSprint) { sprint in
                 SprintDetailView(sprint: sprint)
+            }
+            .alert(
+                "Delete Sprint?",
+                isPresented: $showingDeleteConfirmation,
+                presenting: sprintPendingDelete
+            ) { sprint in
+                Button("Delete", role: .destructive) {
+                    deleteSprint(sprint)
+                }
+                Button("Cancel", role: .cancel) {
+                    sprintPendingDelete = nil
+                }
+            } message: { sprint in
+                Text("\(sprint.name) and its sprint assignment links will be removed.")
             }
         }
     }
@@ -71,13 +105,41 @@ struct SprintListView: View {
     
     private func deleteSprints(at offsets: IndexSet) {
         for index in offsets {
-            modelContext.delete(sprints[index])
+            deleteSprint(sprints[index])
         }
+    }
+
+    private func deleteSprint(_ sprint: Sprint) {
+        if selectedSprint?.id == sprint.id {
+            selectedSprint = nil
+        }
+        if editingSprint?.id == sprint.id {
+            editingSprint = nil
+        }
+        sprintPendingDelete = nil
+        modelContext.delete(sprint)
     }
 }
 
 struct SprintRowView: View {
     let sprint: Sprint
+
+    private var storyItems: [TierItem] {
+        (sprint.items ?? []).filter { $0.deletedAt == nil && $0.type == .user_story }
+    }
+
+    private var totalStoryCount: Int {
+        storyItems.count
+    }
+
+    private var completedStoryCount: Int {
+        storyItems.filter { $0.status == .done }.count
+    }
+
+    private var storyProgress: Double {
+        guard totalStoryCount > 0 else { return 0 }
+        return Double(completedStoryCount) / Double(totalStoryCount)
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -116,34 +178,57 @@ struct SprintRowView: View {
                 }
             }
             
-            ProgressView(value: sprint.progress)
+            ProgressView(value: storyProgress)
                 .tint(sprint.status.color)
-            
+
             HStack {
-                Text("\(sprint.completedPoints)/\(sprint.committedPoints) pts")
+                Text("\(completedStoryCount)/\(totalStoryCount) stories")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                
+
                 Spacer()
-                
+
                 Text("\(Int(sprint.capacityUsedPercent))% capacity")
                     .font(.caption)
                     .foregroundStyle(sprint.capacityUsedPercent > 100 ? .red : .secondary)
+            }
+
+            HStack {
+                Text("\(sprint.completedPoints)/\(sprint.committedPoints) pts")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                Spacer()
             }
         }
         .padding(.vertical, 4)
     }
 }
 
-struct CreateSprintView: View {
+struct SprintFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    
+
+    private let sprint: Sprint?
+
     @State private var name = ""
     @State private var startDate = Date()
     @State private var endDate = Date().addingTimeInterval(14 * 24 * 60 * 60)
     @State private var capacityPoints = 40
-    
+    @State private var status: SprintStatus = .planning
+
+    init(sprint: Sprint? = nil) {
+        self.sprint = sprint
+        _name = State(initialValue: sprint?.name ?? "")
+        _startDate = State(initialValue: sprint?.startDate ?? Date())
+        _endDate = State(initialValue: sprint?.endDate ?? Date().addingTimeInterval(14 * 24 * 60 * 60))
+        _capacityPoints = State(initialValue: sprint?.capacityPoints ?? 40)
+        _status = State(initialValue: sprint?.status ?? .planning)
+    }
+
+    private var isFormValid: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && endDate >= startDate
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -153,34 +238,55 @@ struct CreateSprintView: View {
                     DatePicker("Start Date", selection: $startDate, displayedComponents: .date)
                     DatePicker("End Date", selection: $endDate, displayedComponents: .date)
                 }
-                
+
                 Section("Capacity") {
                     Stepper("Capacity: \(capacityPoints) points", value: $capacityPoints, in: 0...200, step: 5)
                 }
+
+                Section("Status") {
+                    Picker("Sprint Status", selection: $status) {
+                        ForEach(SprintStatus.allCases, id: \.self) { sprintStatus in
+                            Text(sprintStatus.displayName).tag(sprintStatus)
+                        }
+                    }
+                }
             }
-            .navigationTitle("New Sprint")
+            .navigationTitle(sprint == nil ? "New Sprint" : "Edit Sprint")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") {
-                        createSprint()
+                    Button(sprint == nil ? "Create" : "Save") {
+                        saveSprint()
                     }
-                    .disabled(name.isEmpty)
+                    .disabled(!isFormValid)
                 }
             }
         }
     }
-    
-    private func createSprint() {
-        let sprint = Sprint(
-            name: name,
-            startDate: startDate,
-            endDate: endDate,
-            capacityPoints: capacityPoints
-        )
-        modelContext.insert(sprint)
+
+    private func saveSprint() {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let sprint {
+            sprint.name = trimmedName
+            sprint.startDate = startDate
+            sprint.endDate = endDate
+            sprint.capacityPoints = capacityPoints
+            sprint.status = status
+            sprint.touch()
+        } else {
+            let newSprint = Sprint(
+                name: trimmedName,
+                startDate: startDate,
+                endDate: endDate,
+                capacityPoints: capacityPoints,
+                status: status
+            )
+            modelContext.insert(newSprint)
+        }
+
         dismiss()
     }
 }
@@ -197,7 +303,7 @@ struct SprintDetailView: View {
     }
     
     var availableItems: [TierItem] {
-        allItems.filter { $0.sprint == nil && $0.deletedAt == nil && $0.type.isStoryType }
+        allItems.filter { $0.sprint == nil && $0.deletedAt == nil && $0.type == .user_story }
     }
     
     var body: some View {
@@ -316,7 +422,7 @@ struct SprintDetailView: View {
     private func recalculatePoints() {
         let items = sprintItems
         sprint.committedPoints = items.compactMap { $0.storyPoints }.reduce(0, +)
-        sprint.completedPoints = items.filter { $0.status == .completed }.compactMap { $0.storyPoints }.reduce(0, +)
+        sprint.completedPoints = items.filter { $0.status == .done }.compactMap { $0.storyPoints }.reduce(0, +)
         sprint.touch()
     }
 }

@@ -11,87 +11,106 @@ struct TreeNodeView: View {
     let item: TierItem
     let loadChildren: (TierItem) -> [TierItem]
     @Binding var selectedItem: TierItem?
+    @Binding var expandedItems: Set<UUID>
     
     let onAddChild: (TierItem, ItemType) -> Void
     let onDelete: (TierItem) -> Void
+    let onUpdateTitle: (TierItem, String) -> Void
     
-    @State private var isExpanded: Bool = false
-    @State private var showAddMenu: Bool = false
-
-    private var loadedChildren: [TierItem] {
+    @State private var isHovered: Bool = false
+    @State private var isEditing: Bool = false
+    @State private var editedTitle: String = ""
+    @FocusState private var editFocus: Bool
+    
+    private var isExpanded: Bool {
+        expandedItems.contains(item.id)
+    }
+    
+    private var children: [TierItem] {
         isExpanded ? loadChildren(item) : []
     }
     
     var body: some View {
-        if item.canHaveChildren {
-            DisclosureGroup(
-                isExpanded: $isExpanded,
-                content: {
-                    if isExpanded {
-                        ForEach(loadedChildren) { child in
-                            TreeNodeView(
-                                item: child,
-                                loadChildren: loadChildren,
-                                selectedItem: $selectedItem,
-                                onAddChild: onAddChild,
-                                onDelete: onDelete
-                            )
-                        }
-                    }
-                },
-                label: {
-                    nodeLabel
+        VStack(alignment: .leading, spacing: 0) {
+            nodeRow
+            
+            if isExpanded && !children.isEmpty {
+                ForEach(children) { child in
+                    TreeNodeView(
+                        item: child,
+                        loadChildren: loadChildren,
+                        selectedItem: $selectedItem,
+                        expandedItems: $expandedItems,
+                        onAddChild: onAddChild,
+                        onDelete: onDelete,
+                        onUpdateTitle: onUpdateTitle
+                    )
                 }
-            )
-        } else {
-            nodeLabel
+            }
         }
     }
     
-    // MARK: - Node Label
-    
     @ViewBuilder
-    private var nodeLabel: some View {
-        HStack(spacing: 8) {
-            Image(systemName: item.type.icon)
-                .font(.system(size: 14))
-                .foregroundStyle(typeColor)
-                .frame(width: 20)
+    private var nodeRow: some View {
+        HStack(spacing: 6) {
+            expandButton
             
-            Text(item.title)
-                .font(.system(size: 13))
-                .lineLimit(1)
-                .truncationMode(.tail)
+            Image(systemName: item.type.icon)
+                .font(.system(size: 12))
+                .foregroundStyle(typeColor)
+                .frame(width: 16)
+            
+            if isEditing {
+                TextField("", text: $editedTitle)
+                    .font(.system(size: 13))
+                    .textFieldStyle(.plain)
+                    .lineLimit(1)
+                    .onSubmit {
+                        saveEdit()
+                    }
+                    .onExitCommand {
+                        cancelEdit()
+                    }
+                    .focused($editFocus)
+            } else {
+                Text(item.title)
+                    .font(.system(size: 13))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .onTapGesture(count: 2) {
+                        startEditing()
+                    }
+            }
             
             Spacer()
             
-            statusBadge
-            
-            if item.aiGenerated {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.purple)
+            if item.canHaveChildren {
+                addButton
             }
+            
+            deleteButton
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
         .padding(.horizontal, 8)
+        .padding(.leading, CGFloat(item.depth) * 16)
         .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(isSelected ? Color.accentColor.opacity(0.15) : Color.clear)
+            RoundedRectangle(cornerRadius: 4)
+                .fill(isSelected ? Color.accentColor.opacity(0.15) : (isHovered ? Color.secondary.opacity(0.08) : Color.clear))
         )
         .contentShape(Rectangle())
         .onTapGesture {
             selectedItem = item
         }
+        .onHover { hovering in
+            isHovered = hovering
+        }
         .contextMenu {
             if item.canHaveChildren {
-                Menu("Add Child") {
-                    ForEach(item.type.allowedChildTypes, id: \.self) { childType in
-                        Button {
-                            onAddChild(item, childType)
-                        } label: {
-                            Label(childType.displayName, systemImage: childType.icon)
-                        }
+                ForEach(item.type.allowedChildTypes, id: \.self) { childType in
+                    Button {
+                        onAddChild(item, childType)
+                    } label: {
+                        Label("Add \(childType.displayName)", systemImage: childType.icon)
                     }
                 }
             }
@@ -106,28 +125,59 @@ struct TreeNodeView: View {
         }
     }
     
-    // MARK: - Status Badge
+    @ViewBuilder
+    private var expandButton: some View {
+        if item.canHaveChildren {
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    if isExpanded {
+                        expandedItems.remove(item.id)
+                    } else {
+                        expandedItems.insert(item.id)
+                    }
+                }
+            } label: {
+                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 16)
+            }
+            .buttonStyle(.plain)
+        } else {
+            Spacer().frame(width: 16)
+        }
+    }
     
     @ViewBuilder
-    private var statusBadge: some View {
-        HStack(spacing: 3) {
-            Circle()
-                .fill(item.status.color)
-                .frame(width: 6, height: 6)
-            
-            Text(item.status.displayName)
+    private var addButton: some View {
+        Menu {
+            ForEach(item.type.allowedChildTypes, id: \.self) { childType in
+                Button {
+                    onAddChild(item, childType)
+                } label: {
+                    Label(childType.displayName, systemImage: childType.icon)
+                }
+            }
+        } label: {
+            Image(systemName: "plus")
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 2)
-        .background(
-            Capsule()
-                .fill(item.status.color.opacity(0.15))
-        )
+        .menuStyle(.borderlessButton)
+        .fixedSize()
     }
     
-    // MARK: - Computed Properties
+    @ViewBuilder
+    private var deleteButton: some View {
+        Button {
+            onDelete(item)
+        } label: {
+            Image(systemName: "trash")
+                .font(.system(size: 10))
+                .foregroundStyle(.red.opacity(0.7))
+        }
+        .buttonStyle(.plain)
+    }
     
     private var isSelected: Bool {
         selectedItem?.id == item.id
@@ -138,16 +188,32 @@ struct TreeNodeView: View {
         case .capability:
             return .blue
         case .feature:
-            return .purple
-        case .epic:
-            return .orange
-        case .business_story:
             return .green
-        case .technical_story:
-            return .mint
+        case .user_story:
+            return .orange
         case .test_case:
-            return .cyan
+            return .purple
         }
+    }
+    
+    private func startEditing() {
+        editedTitle = item.title
+        isEditing = true
+        editFocus = true
+    }
+    
+    private func saveEdit() {
+        let trimmedTitle = editedTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedTitle.isEmpty && trimmedTitle != item.title {
+            onUpdateTitle(item, trimmedTitle)
+        }
+        isEditing = false
+        editFocus = false
+    }
+    
+    private func cancelEdit() {
+        isEditing = false
+        editFocus = false
     }
 }
 
@@ -155,7 +221,7 @@ extension TreeNodeView {
     static func makeSampleItem(
         type: ItemType,
         title: String,
-        status: ItemStatus = .backlog,
+        status: ItemStatus = .todo,
         children: [TierItem] = []
     ) -> TierItem {
         let item = TierItem(

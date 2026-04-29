@@ -10,120 +10,78 @@ import SwiftUI
 
 /// Represents the SDLC status of an item
 enum ItemStatus: String, Codable, CaseIterable {
-    case requirement_input
-    case requirement_review
-    case needs_info
-    case backlog
-    case ai_decomposing
+    case todo
     case in_progress
-    case waiting_for_test
-    case testing
-    case acceptance
-    case completed
-    case published
+    case test
+    case done
     case blocked
     case cancelled
+    case needs_info
     
     /// Human-readable display name
     var displayName: String {
         switch self {
-        case .requirement_input:
-            return "Requirement Input"
-        case .requirement_review:
-            return "Requirement Review"
-        case .needs_info:
-            return "Needs Info"
-        case .backlog:
-            return "Backlog"
-        case .ai_decomposing:
-            return "AI Decomposing"
+        case .todo:
+            return "To Do"
         case .in_progress:
             return "In Progress"
-        case .waiting_for_test:
-            return "Waiting for Test"
-        case .testing:
-            return "Testing"
-        case .acceptance:
-            return "Acceptance"
-        case .completed:
-            return "Completed"
-        case .published:
-            return "Published"
+        case .test:
+            return "Test"
+        case .done:
+            return "Done"
         case .blocked:
             return "Blocked"
         case .cancelled:
             return "Cancelled"
+        case .needs_info:
+            return "Needs Info"
         }
     }
     
     /// Color for status indicator
     var color: Color {
         switch self {
-        case .requirement_input:
-            return .gray
-        case .requirement_review:
-            return .orange
-        case .needs_info:
-            return .yellow
-        case .backlog:
+        case .todo:
             return .secondary
-        case .ai_decomposing:
-            return .purple
         case .in_progress:
             return .blue
-        case .waiting_for_test:
-            return .cyan
-        case .testing:
+        case .test:
             return .indigo
-        case .acceptance:
-            return .mint
-        case .completed:
+        case .done:
             return .green
-        case .published:
-            return .teal
         case .blocked:
             return .red
         case .cancelled:
             return .gray
+        case .needs_info:
+            return .yellow
         }
     }
     
     /// SF Symbol icon for status
     var icon: String {
         switch self {
-        case .requirement_input:
-            return "pencil.and.list.clipboard"
-        case .requirement_review:
-            return "doc.text.magnifyingglass"
-        case .needs_info:
-            return "exclamationmark.circle"
-        case .backlog:
-            return "tray"
-        case .ai_decomposing:
-            return "cpu"
+        case .todo:
+            return "circle"
         case .in_progress:
             return "play.circle"
-        case .waiting_for_test:
-            return "hourglass"
-        case .testing:
+        case .test:
             return "testtube.2"
-        case .acceptance:
-            return "checkmark.seal"
-        case .completed:
+        case .done:
             return "checkmark.circle"
-        case .published:
-            return "cloud.upload"
         case .blocked:
             return "xmark.octagon"
         case .cancelled:
             return "xmark.circle"
+        case .needs_info:
+            return "exclamationmark.circle"
         }
     }
     
     /// Whether this is a terminal state (no further transitions)
     var isTerminal: Bool {
         switch self {
-        case .published, .cancelled:
+        case .done, .cancelled:
             return true
         default:
             return false
@@ -133,7 +91,7 @@ enum ItemStatus: String, Codable, CaseIterable {
     /// Whether this status indicates active work
     var isActive: Bool {
         switch self {
-        case .in_progress, .testing, .ai_decomposing:
+        case .in_progress, .test:
             return true
         default:
             return false

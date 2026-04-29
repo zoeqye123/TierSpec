@@ -58,7 +58,7 @@ struct ItemDetailViewFeaturePreview: PreviewProvider {
         let item = TierItem.makePreviewItem(
             type: .feature,
             title: "OAuth 2.0 Integration",
-            status: .requirement_review,
+            status: .todo,
             priority: 70,
             storyPoints: 8,
             complexity: .l
@@ -71,52 +71,16 @@ struct ItemDetailViewFeaturePreview: PreviewProvider {
     }
 }
 
-struct ItemDetailViewEpicPreview: PreviewProvider {
+struct ItemDetailViewUserStoryPreview: PreviewProvider {
     static var previews: some View {
         let item = TierItem.makePreviewItem(
-            type: .epic,
-            title: "Social Login Providers",
-            status: .backlog,
-            priority: 60,
-            storyPoints: 13,
-            complexity: .xl
-        )
-        
-        NavigationStack {
-            ItemDetailView(item: item)
-        }
-        .modelContainer(for: TierItem.self, inMemory: true)
-    }
-}
-
-struct ItemDetailViewBusinessStoryPreview: PreviewProvider {
-    static var previews: some View {
-        let item = TierItem.makePreviewItem(
-            type: .business_story,
+            type: .user_story,
             title: "Google Sign-In for Users",
-            status: .testing,
+            status: .test,
             priority: 85,
             storyPoints: 5,
             complexity: .m,
             aiGenerated: true
-        )
-        
-        NavigationStack {
-            ItemDetailView(item: item)
-        }
-        .modelContainer(for: TierItem.self, inMemory: true)
-    }
-}
-
-struct ItemDetailViewTechnicalStoryPreview: PreviewProvider {
-    static var previews: some View {
-        let item = TierItem.makePreviewItem(
-            type: .technical_story,
-            title: "Implement Token Refresh Flow",
-            status: .in_progress,
-            priority: 90,
-            storyPoints: 3,
-            complexity: .s
         )
         
         NavigationStack {
@@ -131,7 +95,7 @@ struct ItemDetailViewTestCasePreview: PreviewProvider {
         let item = TierItem.makePreviewItem(
             type: .test_case,
             title: "Verify Token Expiry Handling",
-            status: .completed,
+            status: .done,
             priority: 50,
             storyPoints: 1,
             complexity: .xs
@@ -147,9 +111,9 @@ struct ItemDetailViewTestCasePreview: PreviewProvider {
 struct ItemDetailViewAIGeneratedPreview: PreviewProvider {
     static var previews: some View {
         let item = TierItem.makePreviewItem(
-            type: .epic,
+            type: .user_story,
             title: "AI-Powered Recommendations",
-            status: .ai_decomposing,
+            status: .todo,
             priority: 75,
             storyPoints: 21,
             complexity: .xl,
@@ -190,12 +154,10 @@ struct ItemDetailViewStatusGalleryPreview: PreviewProvider {
 
 struct StatusGalleryView: View {
     let statuses: [(ItemStatus, String)] = [
-        (.requirement_input, "Input"),
-        (.requirement_review, "Review"),
-        (.backlog, "Backlog"),
+        (.todo, "To Do"),
         (.in_progress, "Progress"),
-        (.testing, "Testing"),
-        (.completed, "Done"),
+        (.test, "Test"),
+        (.done, "Done"),
         (.blocked, "Blocked")
     ]
     

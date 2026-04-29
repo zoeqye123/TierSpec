@@ -7,64 +7,55 @@
 
 import Foundation
 
+// MARK: - Actor Type
+
+/// Represents the type of actor performing a state transition
+enum ActorType: String, Codable, CaseIterable {
+    case human
+    case ai
+    case system
+}
+
 /// Represents the valid transitions in the SDLC workflow
 enum StateMachine {
     
     // MARK: - Allowed Transitions
     
     /// Returns the allowed target states for a given current state
-    static func allowedTransitions(from currentState: ItemStatus, previousState: ItemStatus? = nil) -> [ItemStatus] {
-        // Blocked items can only return to previous state or be cancelled
-        if currentState == .blocked {
-            var transitions: [ItemStatus] = []
-            if let previous = previousState {
-                transitions.append(previous)
-            }
-            transitions.append(.cancelled)
-            return transitions
-        }
-        
-        // Cancelled is a terminal state
+    static func allowedTransitions(from currentState: ItemStatus, actorType: ActorType = .human) -> [ItemStatus] {
         if currentState == .cancelled {
             return []
         }
         
-        // Get base allowed transitions
-        var transitions = baseAllowedTransitions(from: currentState)
+        if currentState == .done {
+            return [.blocked, .cancelled, .needs_info]
+        }
         
-        // Add global transitions (blocked and cancelled)
-        transitions.append(.blocked)
-        transitions.append(.cancelled)
+        if currentState == .blocked {
+            return [.todo, .in_progress, .cancelled, .needs_info]
+        }
         
-        return transitions
+        if currentState == .needs_info {
+            return [.todo, .blocked, .cancelled]
+        }
+        
+        let baseTransitions = baseAllowedTransitions(from: currentState, actorType: actorType)
+        return baseTransitions + [.blocked, .cancelled, .needs_info]
     }
     
-    /// Base allowed transitions without global states
-    private static func baseAllowedTransitions(from state: ItemStatus) -> [ItemStatus] {
+    private static func baseAllowedTransitions(from state: ItemStatus, actorType: ActorType) -> [ItemStatus] {
         switch state {
-        case .requirement_input:
-            return [.requirement_review]
-        case .requirement_review:
-            return [.backlog, .needs_info]
-        case .needs_info:
-            return []
-        case .backlog:
-            return [.ai_decomposing]
-        case .ai_decomposing:
-            return [.backlog]
+        case .todo:
+            return [.in_progress]
         case .in_progress:
-            return [.waiting_for_test]
-        case .waiting_for_test:
-            return [.testing]
-        case .testing:
-            return [.acceptance, .in_progress]
-        case .acceptance:
-            return [.completed, .in_progress]
-        case .completed:
-            return [.published]
-        case .published:
-            return []
-        case .blocked, .cancelled:
+            return [.test]
+        case .test:
+            let transitions: [ItemStatus] = [.in_progress]
+            if actorType == .human {
+                return transitions + [.done]
+            }
+            return transitions
+        case .done, .blocked, .cancelled, .needs_info:
             return []
         }
     }
@@ -72,53 +63,85 @@ enum StateMachine {
     // MARK: - Validation
     
     /// Validates if a transition from one state to another is allowed
-    static func isValidTransition(from currentState: ItemStatus, to newState: ItemStatus, previousState: ItemStatus? = nil) -> Bool {
-        // Same state is not a transition
+    static func isValidTransition(from currentState: ItemStatus, to newState: ItemStatus, actorType: ActorType = .human) -> Bool {
         if currentState == newState {
             return false
         }
         
-        // Can always transition to blocked or cancelled (global states)
-        if newState == .blocked || newState == .cancelled {
+        if currentState == .cancelled {
+            return false
+        }
+        
+        if newState == .blocked || newState == .cancelled || newState == .needs_info {
             return true
         }
         
-        // Blocked items must return to previous state
         if currentState == .blocked {
-            return previousState == newState
+            return newState == .todo || newState == .in_progress
         }
         
-        // Check if transition is in allowed list
-        return baseAllowedTransitions(from: currentState).contains(newState)
+        if currentState == .needs_info {
+            return newState == .todo
+        }
+        
+        if currentState == .done {
+            return false
+        }
+        
+        if newState == .done && actorType != .human {
+            return false
+        }
+        
+        return baseAllowedTransitions(from: currentState, actorType: actorType).contains(newState)
     }
     
     /// Asserts that a transition is valid, throwing an error if not
-    static func assertValidTransition(from currentState: ItemStatus, to newState: ItemStatus, previousState: ItemStatus? = nil) throws {
-        // Same state
+    static func assertValidTransition(from currentState: ItemStatus, to newState: ItemStatus, actorType: ActorType = .human) throws {
         if currentState == newState {
             throw StateMachineError.alreadyInState(currentState)
         }
         
-        // Global transitions
-        if newState == .blocked || newState == .cancelled {
+        if currentState == .cancelled {
+            throw StateMachineError.cancelledIsTerminal
+        }
+        
+        if newState == .blocked {
             return
         }
         
-        // Blocked items
+        if newState == .cancelled {
+            return
+        }
+        
+        if newState == .needs_info {
+            return
+        }
+        
         if currentState == .blocked {
-            guard let previous = previousState else {
-                throw StateMachineError.missingPreviousState
+            if newState == .todo || newState == .in_progress {
+                return
             }
-            guard previous == newState else {
-                throw StateMachineError.invalidBlockedTransition(expected: previous, actual: newState)
-            }
-            return
+            throw StateMachineError.invalidBlockedTransition(allowed: [.todo, .in_progress], actual: newState)
         }
         
-        // Normal transitions
-        let allowed = baseAllowedTransitions(from: currentState)
+        if newState == .done && actorType != .human {
+            throw StateMachineError.onlyHumanCanTransitionToDone(actorType: actorType)
+        }
+        
+        if currentState == .needs_info {
+            if newState == .todo {
+                return
+            }
+            throw StateMachineError.invalidNeedsInfoTransition(allowed: [.todo], actual: newState)
+        }
+        
+        if currentState == .done {
+            throw StateMachineError.doneIsTerminal
+        }
+        
+        let allowed = baseAllowedTransitions(from: currentState, actorType: actorType)
         guard allowed.contains(newState) else {
-            let allowedWithGlobal = allowed + [.blocked, .cancelled]
+            let allowedWithGlobal = allowed + [.blocked, .cancelled, .needs_info]
             throw StateMachineError.invalidTransition(from: currentState, to: newState, allowed: allowedWithGlobal)
         }
     }
@@ -127,24 +150,24 @@ enum StateMachine {
     
     /// Returns true if the state is a terminal state (no further transitions possible)
     static func isTerminalState(_ state: ItemStatus) -> Bool {
-        return state == .published || state == .cancelled
+        return state == .done || state == .cancelled
     }
     
     /// Returns true if the state indicates active work
     static func isActiveState(_ state: ItemStatus) -> Bool {
-        return state == .in_progress || state == .testing || state == .ai_decomposing
+        return state == .in_progress || state == .test
     }
     
     /// Returns the state group for UI display
     static func stateGroup(for state: ItemStatus) -> StateGroup {
         switch state {
-        case .requirement_input, .requirement_review, .needs_info:
+        case .todo, .needs_info:
             return .requirement
-        case .backlog, .ai_decomposing:
-            return .planning
-        case .in_progress, .waiting_for_test, .testing, .acceptance:
+        case .in_progress:
             return .execution
-        case .completed, .published:
+        case .test:
+            return .execution
+        case .done:
             return .completed
         case .blocked:
             return .blocked
@@ -178,20 +201,31 @@ enum StateGroup: String, CaseIterable {
 
 // MARK: - Errors
 
-enum StateMachineError: LocalizedError {
+enum StateMachineError: LocalizedError, Equatable {
     case alreadyInState(ItemStatus)
-    case missingPreviousState
-    case invalidBlockedTransition(expected: ItemStatus, actual: ItemStatus)
+    case cancelledIsTerminal
+    case doneIsTerminal
+    case invalidBlockedTransition(allowed: [ItemStatus], actual: ItemStatus)
+    case invalidNeedsInfoTransition(allowed: [ItemStatus], actual: ItemStatus)
+    case onlyHumanCanTransitionToDone(actorType: ActorType)
     case invalidTransition(from: ItemStatus, to: ItemStatus, allowed: [ItemStatus])
     
     var errorDescription: String? {
         switch self {
         case .alreadyInState(let state):
             return "Item is already in state '\(state.displayName)'"
-        case .missingPreviousState:
-            return "Blocked item is missing previous state and cannot be restored"
-        case .invalidBlockedTransition(let expected, let actual):
-            return "Blocked items must transition back to '\(expected.displayName)', received '\(actual.displayName)'"
+        case .cancelledIsTerminal:
+            return "Cancelled items cannot be transitioned to any other state"
+        case .doneIsTerminal:
+            return "Items in 'done' can only transition to 'blocked', 'cancelled', or 'needs_info'"
+        case .invalidBlockedTransition(let allowed, let actual):
+            let allowedNames = allowed.map { $0.displayName }.joined(separator: ", ")
+            return "Blocked items can only transition to \(allowedNames). Cannot transition to '\(actual.displayName)'"
+        case .invalidNeedsInfoTransition(let allowed, let actual):
+            let allowedNames = allowed.map { $0.displayName }.joined(separator: ", ")
+            return "Items in 'needs_info' can only transition to \(allowedNames). Cannot transition to '\(actual.displayName)'"
+        case .onlyHumanCanTransitionToDone(let actorType):
+            return "Only human actors can transition to 'done'. Actor type '\(actorType.rawValue)' is not allowed"
         case .invalidTransition(let from, let to, let allowed):
             let allowedNames = allowed.map { $0.displayName }.joined(separator: ", ")
             return "Cannot transition from '\(from.displayName)' to '\(to.displayName)'. Allowed: \(allowedNames.isEmpty ? "none" : allowedNames)"

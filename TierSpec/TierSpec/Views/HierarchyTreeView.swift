@@ -9,40 +9,46 @@ import SwiftUI
 import SwiftData
 
 struct HierarchyTreeView: View {
-    @Query(sort: \TierItem.position)
-    private var allItems: [TierItem]
-    
+    @Query(sort: \TierItem.position) private var allItems: [TierItem]
     @Environment(\.modelContext) private var modelContext
     
     @Binding var selectedItem: TierItem?
+    let onAddChild: (TierItem, ItemType) -> Void
+    let onDelete: (TierItem) -> Void
+    let onUpdateTitle: (TierItem, String) -> Void
     
-    init(selectedItem: Binding<TierItem?>) {
-        self._selectedItem = selectedItem
-    }
+    @State private var expandedItems: Set<UUID> = []
     
     private var rootItems: [TierItem] {
         allItems.filter { item in
             item.parent == nil && item.type == .capability && item.deletedAt == nil
-        }
+        }.sorted { $0.position < $1.position }
     }
     
     var body: some View {
         List {
             if rootItems.isEmpty {
                 emptyStateView
+                    .listRowSeparator(.hidden)
             } else {
                 ForEach(rootItems) { item in
                     TreeNodeView(
                         item: item,
                         loadChildren: loadChildren,
                         selectedItem: $selectedItem,
-                        onAddChild: addChild,
-                        onDelete: deleteItem
+                        expandedItems: $expandedItems,
+                        onAddChild: onAddChild,
+                        onDelete: onDelete,
+                        onUpdateTitle: onUpdateTitle
                     )
+                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                    .listRowSeparator(.hidden)
                 }
+                .onMove(perform: moveRootItems)
             }
         }
-        .listStyle(.sidebar)
+        .listStyle(.plain)
+        .frame(maxHeight: .infinity)
     }
     
     @ViewBuilder
@@ -66,40 +72,37 @@ struct HierarchyTreeView: View {
     }
     
     private func loadChildren(_ item: TierItem) -> [TierItem] {
-        item.outlineChildren
+        (item.children ?? [])
+            .filter { $0.deletedAt == nil }
+            .sorted { $0.position < $1.position }
     }
-    
-    private func addChild(to parent: TierItem, type: ItemType) {
-        withAnimation {
-            let nextPosition = Double(parent.children?.count ?? 0)
-            let child = TierItem(
-                type: type,
-                title: "New \(type.displayName)",
-                description: nil,
-                status: .requirement_input,
-                position: nextPosition
-            )
-            child.parent = parent
-            if parent.children == nil {
-                parent.children = []
-            }
-            parent.children?.append(child)
-            modelContext.insert(child)
-            selectedItem = child
-        }
-    }
-    
-    private func deleteItem(_ item: TierItem) {
-        withAnimation {
-            item.softDelete()
-            if selectedItem?.id == item.id {
-                selectedItem = nil
-            }
+
+    private func moveRootItems(from source: IndexSet, to destination: Int) {
+        guard source.count == 1, let sourceIndex = source.first else { return }
+        guard sourceIndex < rootItems.count else { return }
+
+        // TreeStore.moveNode root reorder path has a strict destination usage;
+        // normalize move offset to a stable target index in current array bounds.
+        let normalizedDestination = sourceIndex < destination ? destination - 1 : destination
+        guard normalizedDestination >= 0, normalizedDestination < rootItems.count else { return }
+        guard normalizedDestination != sourceIndex else { return }
+
+        let movedItem = rootItems[sourceIndex]
+
+        Task { @MainActor in
+            let treeStore = TreeStore(modelContext: modelContext)
+            await treeStore.loadTree()
+            await treeStore.moveNode(movedItem, from: sourceIndex, to: normalizedDestination)
         }
     }
 }
 
 #Preview {
-    HierarchyTreeView(selectedItem: .constant(nil))
-        .modelContainer(for: TierItem.self, inMemory: true)
+    HierarchyTreeView(
+        selectedItem: .constant(nil),
+        onAddChild: { _, _ in },
+        onDelete: { _ in },
+        onUpdateTitle: { _, _ in }
+    )
+    .modelContainer(for: TierItem.self, inMemory: true)
 }

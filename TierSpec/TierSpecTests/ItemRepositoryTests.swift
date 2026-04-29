@@ -10,6 +10,7 @@ import SwiftData
 import Foundation
 @testable import TierSpec
 
+@MainActor
 struct ItemRepositoryTests {
     
     private func createInMemoryContainer() -> ModelContainer {
@@ -58,10 +59,10 @@ struct ItemRepositoryTests {
         let capability = TierItem(type: .capability, title: "Capability")
         try await repository.create(capability)
         
-        let epic = TierItem(type: .epic, title: "Invalid Child")
+        let userStory = TierItem(type: .user_story, title: "Invalid Child")
         
         await #expect(throws: RepositoryError.self) {
-            try await repository.create(epic, parent: capability)
+            try await repository.create(userStory, parent: capability)
         }
     }
     
@@ -170,14 +171,14 @@ struct ItemRepositoryTests {
         let context = container.mainContext
         let repository = ItemRepository(modelContext: context)
         
-        let item1 = TierItem(type: .capability, title: "Item 1", status: .backlog)
+        let item1 = TierItem(type: .capability, title: "Item 1", status: .todo)
         let item2 = TierItem(type: .capability, title: "Item 2", status: .in_progress)
-        let item3 = TierItem(type: .capability, title: "Item 3", status: .backlog)
+        let item3 = TierItem(type: .capability, title: "Item 3", status: .todo)
         try await repository.create(item1)
         try await repository.create(item2)
         try await repository.create(item3)
         
-        let backlogItems = try await repository.fetch(byStatus: .backlog)
+        let backlogItems = try await repository.fetch(byStatus: .todo)
         #expect(backlogItems.count == 2)
     }
     

@@ -7,8 +7,6 @@
 
 import SwiftUI
 
-// MARK: - Preview Helpers
-
 private enum TreeNodePreviewFactory {
     static func singleCapability() -> TierItem {
         TierItem(
@@ -20,9 +18,9 @@ private enum TreeNodePreviewFactory {
 
     static func singleStory() -> TierItem {
         TierItem(
-            type: .business_story,
+            type: .user_story,
             title: "As a user, I want to reset my password",
-            status: .backlog,
+            status: .todo,
             aiGenerated: true,
             aiConfidence: 0.85
         )
@@ -30,45 +28,41 @@ private enum TreeNodePreviewFactory {
 
     static func hierarchyRoot() -> TierItem {
         let capability = TierItem(type: .capability, title: "E-Commerce Platform", status: .in_progress)
-        let feature = TierItem(type: .feature, title: "Shopping Cart", status: .backlog)
-        let epic = TierItem(type: .epic, title: "Cart Management", status: .requirement_input)
-        let story = TierItem(type: .business_story, title: "Add items to cart", status: .backlog, aiGenerated: true)
-        let testCase = TierItem(type: .test_case, title: "Verify cart total calculation", status: .backlog)
+        let feature = TierItem(type: .feature, title: "Shopping Cart", status: .todo)
+        let story = TierItem(type: .user_story, title: "Add items to cart", status: .todo, aiGenerated: true)
+        let testCase = TierItem(type: .test_case, title: "Verify cart total calculation", status: .todo)
 
         feature.parent = capability
-        epic.parent = feature
-        story.parent = epic
+        story.parent = feature
         testCase.parent = story
 
         capability.children = [feature]
-        feature.children = [epic]
-        epic.children = [story]
+        feature.children = [story]
         story.children = [testCase]
 
         return capability
     }
 
     static func multipleCapabilities() -> [TierItem] {
-        let auth = TierItem(type: .capability, title: "User Authentication", status: .completed)
-        let login = TierItem(type: .feature, title: "Login", status: .completed)
+        let auth = TierItem(type: .capability, title: "User Authentication", status: .done)
+        let login = TierItem(type: .feature, title: "Login", status: .done)
         login.parent = auth
         auth.children = [login]
 
         let payment = TierItem(type: .capability, title: "Payment Processing", status: .in_progress)
-        let card = TierItem(type: .feature, title: "Credit Card", status: .testing)
+        let card = TierItem(type: .feature, title: "Credit Card", status: .test)
         card.parent = payment
         payment.children = [card]
 
-        let inventory = TierItem(type: .capability, title: "Inventory Management", status: .backlog)
+        let inventory = TierItem(type: .capability, title: "Inventory Management", status: .todo)
 
         return [auth, payment, inventory]
     }
 
     static func statusItems() -> [TierItem] {
         let statuses: [ItemStatus] = [
-            .requirement_input, .requirement_review, .needs_info, .backlog,
-            .ai_decomposing, .in_progress, .waiting_for_test, .testing,
-            .acceptance, .completed, .published, .blocked, .cancelled,
+            .todo, .in_progress, .test, .done,
+            .blocked, .cancelled, .needs_info,
         ]
 
         return statuses.enumerated().map { index, status in
@@ -83,24 +77,27 @@ private enum TreeNodePreviewFactory {
 
 private struct PreviewTreeList: View {
     let items: [TierItem]
+    @State private var expandedItems: Set<UUID> = []
     
     var body: some View {
-        List {
-            ForEach(items) { item in
-                TreeNodeView(
-                    item: item,
-                    loadChildren: { $0.outlineChildren },
-                    selectedItem: .constant(nil),
-                    onAddChild: { _, _ in },
-                    onDelete: { _ in }
-                )
+        ScrollView {
+            LazyVStack(spacing: 2) {
+                ForEach(items) { item in
+                    TreeNodeView(
+                        item: item,
+                        loadChildren: { $0.outlineChildren },
+                        selectedItem: .constant(nil),
+                        expandedItems: $expandedItems,
+                        onAddChild: { _, _ in },
+                        onDelete: { _ in },
+                        onUpdateTitle: { _, _ in }
+                    )
+                }
             }
+            .padding(8)
         }
-        .listStyle(.sidebar)
     }
 }
-
-// MARK: - Previews
 
 #Preview("Single Node - Capability") {
     PreviewTreeList(items: [TreeNodePreviewFactory.singleCapability()])
@@ -112,7 +109,7 @@ private struct PreviewTreeList: View {
         .frame(width: 400, height: 200)
 }
 
-#Preview("Hierarchy - 5 Levels") {
+#Preview("Hierarchy - 4 Levels") {
     PreviewTreeList(items: [TreeNodePreviewFactory.hierarchyRoot()])
         .frame(width: 400, height: 500)
 }

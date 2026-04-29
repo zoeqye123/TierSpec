@@ -90,7 +90,7 @@ final class TierItem {
         type: ItemType,
         title: String,
         description: String? = nil,
-        status: ItemStatus = .requirement_input,
+        status: ItemStatus = .todo,
         priority: Int = 0,
         position: Double = 0,
         storyPoints: Int? = nil,

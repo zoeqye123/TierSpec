@@ -8,43 +8,28 @@
 import SwiftUI
 import SwiftData
 
-/// Detail view for viewing and editing a TierItem
 struct ItemDetailView: View {
-    // MARK: - Environment
-    
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     
-    // MARK: - Properties
-    
-    /// The item being viewed/edited
     let item: TierItem
     
-    /// Whether we're in edit mode
     @State private var isEditing: Bool = false
-    
-    /// Draft values for editing (copied from item when editing starts)
     @State private var draftTitle: String = ""
     @State private var draftDescription: String = ""
-    @State private var draftStatus: ItemStatus = .requirement_input
+    @State private var draftStatus: ItemStatus = .todo
     @State private var draftPriority: Int = 0
     @State private var draftStoryPoints: Int?
     @State private var draftComplexity: Complexity?
-    
-    /// Validation state
     @State private var validationError: String?
-    
-    // MARK: - Body
     
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                // Header with type badge
                 headerView
                 
                 Divider()
                 
-                // Content area
                 if isEditing {
                     ItemDetailForm(
                         title: $draftTitle,
@@ -54,20 +39,18 @@ struct ItemDetailView: View {
                         storyPoints: $draftStoryPoints,
                         complexity: $draftComplexity,
                         validationError: $validationError,
-                        originalStatus: item.status
+                        originalStatus: item.status,
+                        actorType: item.aiGenerated ? .ai : .human
                     )
                     
                     Divider()
                     
-                    // Edit action buttons
                     editActionButtons
                 } else {
-                    // Read-only view
                     readOnlyContent
                     
                     Divider()
                     
-                    // View action buttons
                     viewActionButtons
                 }
             }
@@ -85,60 +68,72 @@ struct ItemDetailView: View {
         }
     }
     
-    // MARK: - Header View
-    
     private var headerView: some View {
-        HStack(spacing: 12) {
-            // Type icon
-            Image(systemName: item.type.icon)
-                .font(.title2)
-                .foregroundStyle(item.status.color)
+        VStack(alignment: .leading, spacing: 8) {
+            breadcrumbView
             
-            VStack(alignment: .leading, spacing: 4) {
-                // Type badge
-                Text(item.type.displayName)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                Image(systemName: item.type.icon)
+                    .font(.title2)
+                    .foregroundStyle(item.status.color)
                 
-                // Status badge
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(item.status.color)
-                        .frame(width: 8, height: 8)
-                    Text(item.status.displayName)
-                        .font(.caption2)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.type.displayName)
+                        .font(.caption)
+                        .fontWeight(.medium)
                         .foregroundStyle(.secondary)
+                    
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(item.status.color)
+                            .frame(width: 8, height: 8)
+                        Text(item.status.displayName)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-            }
-            
-            Spacer()
-            
-            // AI badge if applicable
-            if item.aiGenerated {
-                Label("AI", systemImage: "sparkles")
-                    .font(.caption)
-                    .foregroundStyle(.purple)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.purple.opacity(0.1), in: Capsule())
+                
+                Spacer()
+                
+                if item.aiGenerated {
+                    Label("AI", systemImage: "sparkles")
+                        .font(.caption)
+                        .foregroundStyle(.purple)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.purple.opacity(0.1), in: Capsule())
+                }
             }
         }
     }
     
-    // MARK: - Read-Only Content
+    @ViewBuilder
+    private var breadcrumbView: some View {
+        if item.depth > 0 {
+            HStack(spacing: 4) {
+                ForEach(Array(item.path.dropLast().enumerated()), id: \.element.id) { index, pathItem in
+                    if index > 0 {
+                        Image(systemName: "chevron.right")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                    Text(pathItem.title)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        }
+    }
     
     private var readOnlyContent: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // Title
             DetailRow(label: "Title", value: item.title)
             
-            // Description
             if let description = item.itemDescription, !description.isEmpty {
                 DetailRow(label: "Description", value: description, isMultiline: true)
             }
             
-            // Status
             DetailRow(label: "Status") {
                 HStack(spacing: 6) {
                     Circle()
@@ -148,15 +143,12 @@ struct ItemDetailView: View {
                 }
             }
             
-            // Priority
             DetailRow(label: "Priority", value: "\(item.priority)")
             
-            // Story Points
             if let storyPoints = item.storyPoints {
                 DetailRow(label: "Story Points", value: "\(storyPoints)")
             }
             
-            // Complexity
             if let complexity = item.complexity {
                 DetailRow(label: "Complexity") {
                     Text(complexity.displayName)
@@ -164,7 +156,6 @@ struct ItemDetailView: View {
                 }
             }
             
-            // Labels
             if !item.labels.isEmpty {
                 DetailRow(label: "Labels") {
                     FlowLayout(spacing: 4) {
@@ -179,7 +170,6 @@ struct ItemDetailView: View {
                 }
             }
             
-            // Timestamps
             Divider()
             
             HStack {
@@ -201,10 +191,46 @@ struct ItemDetailView: View {
                         .font(.caption2)
                 }
             }
+            
+            if item.type == .user_story {
+                testCasesSection
+            }
         }
     }
     
-    // MARK: - View Action Buttons
+    @ViewBuilder
+    private var testCasesSection: some View {
+        let testCases = (item.children ?? []).filter { $0.deletedAt == nil }
+        
+        Divider()
+        
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Test Cases")
+                    .font(.headline)
+                
+                Spacer()
+                
+                Button {
+                    addTestCase()
+                } label: {
+                    Label("Add", systemImage: "plus")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+            }
+            
+            if testCases.isEmpty {
+                Text("No test cases")
+                    .font(.subheadline)
+                    .foregroundStyle(.tertiary)
+            } else {
+                ForEach(testCases.sorted { $0.position < $1.position }) { tc in
+                    TestCaseRow(testCase: tc)
+                }
+            }
+        }
+    }
     
     private var viewActionButtons: some View {
         HStack {
@@ -217,11 +243,8 @@ struct ItemDetailView: View {
         }
     }
     
-    // MARK: - Edit Action Buttons
-    
     private var editActionButtons: some View {
         VStack(spacing: 8) {
-            // Validation error
             if let error = validationError {
                 Text(error)
                     .font(.caption)
@@ -246,18 +269,12 @@ struct ItemDetailView: View {
         }
     }
     
-    // MARK: - Validation
-    
     private var isValid: Bool {
-        // Title must be at least 5 characters
         guard draftTitle.count >= 5 else { return false }
         return true
     }
     
-    // MARK: - Actions
-    
     private func startEditing() {
-        // Copy current values to draft
         draftTitle = item.title
         draftDescription = item.itemDescription ?? ""
         draftStatus = item.status
@@ -269,7 +286,6 @@ struct ItemDetailView: View {
     }
     
     private func cancelEditing() {
-        // Discard changes
         isEditing = false
         validationError = nil
     }
@@ -282,7 +298,11 @@ struct ItemDetailView: View {
         
         if draftStatus != item.status {
             do {
-                try StateMachine.assertValidTransition(from: item.status, to: draftStatus)
+                try StateMachine.assertValidTransition(
+                    from: item.status,
+                    to: draftStatus,
+                    actorType: item.aiGenerated ? .ai : .human
+                )
             } catch {
                 validationError = error.localizedDescription
                 return
@@ -300,11 +320,53 @@ struct ItemDetailView: View {
         isEditing = false
         validationError = nil
     }
+    
+    private func addTestCase() {
+        let nextPosition = Double((item.children ?? []).filter({ $0.deletedAt == nil }).count)
+        let testCase = TierItem(
+            type: .test_case,
+            title: "New Test Case",
+            description: nil,
+            status: .todo,
+            position: nextPosition
+        )
+        testCase.parent = item
+        if item.children == nil {
+            item.children = []
+        }
+        item.children?.append(testCase)
+        modelContext.insert(testCase)
+    }
 }
 
-// MARK: - Detail Row Component
+struct TestCaseRow: View {
+    let testCase: TierItem
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.shield")
+                .font(.caption)
+                .foregroundStyle(testCase.status == .done ? .green : .secondary)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(testCase.title)
+                    .font(.subheadline)
+                    .lineLimit(1)
+                
+                Text(testCase.status.displayName)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            
+            Spacer()
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 8)
+        .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+    }
+}
 
-private struct DetailRow<Content: View>: View {
+struct DetailRow<Content: View>: View {
     let label: String
     let content: () -> Content
     
@@ -332,9 +394,7 @@ private struct DetailRow<Content: View>: View {
     }
 }
 
-// MARK: - Flow Layout Helper
-
-private struct FlowLayout: Layout {
+struct FlowLayout: Layout {
     var spacing: CGFloat = 8
     
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
