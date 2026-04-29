@@ -7,21 +7,19 @@
 export enum ItemType {
   Capability = 'capability',
   Feature = 'feature',
-  Epic = 'epic',
-  BusinessStory = 'business_story',
-  TechnicalStory = 'technical_story',
+  UserStory = 'user_story',
   TestCase = 'test_case',
 }
 
-/** Item status workflow states */
+/** Item status workflow states - simplified 7-state model */
 export enum ItemStatus {
-  Backlog = 'backlog',
-  Ready = 'ready',
+  Todo = 'todo',
   InProgress = 'in_progress',
-  Blocked = 'blocked',
-  Review = 'review',
+  Test = 'test',
   Done = 'done',
-  Archived = 'archived',
+  Blocked = 'blocked',
+  Cancelled = 'cancelled',
+  NeedsInfo = 'needs_info',
 }
 
 /** Complexity estimation levels */
@@ -38,6 +36,13 @@ export enum SprintStatus {
   Active = 'active',
   Completed = 'completed',
   Cancelled = 'cancelled',
+}
+
+/** Actor type - tracks who performed an action */
+export enum ActorType {
+  human = 'human',
+  ai = 'ai',
+  system = 'system',
 }
 
 /** Core item entity */
@@ -130,14 +135,17 @@ export function isValidComplexity(complexity: string): complexity is Complexity 
   return Object.values(Complexity).includes(complexity as Complexity);
 }
 
+/** Type guard for valid actor type */
+export function isValidActorType(actorType: string): actorType is ActorType {
+  return Object.values(ActorType).includes(actorType as ActorType);
+}
+
 /** Valid parent type rules - maps child type to valid parent types */
 export const VALID_PARENT_TYPES: Record<ItemType, ItemType[] | null> = {
   [ItemType.Capability]: null, // Capabilities have no parent (root level)
   [ItemType.Feature]: [ItemType.Capability],
-  [ItemType.Epic]: [ItemType.Feature],
-  [ItemType.BusinessStory]: [ItemType.Epic],
-  [ItemType.TechnicalStory]: [ItemType.Epic],
-  [ItemType.TestCase]: [ItemType.BusinessStory, ItemType.TechnicalStory],
+  [ItemType.UserStory]: [ItemType.Feature],
+  [ItemType.TestCase]: [ItemType.UserStory],
 };
 
 /** Check if a parent type is valid for a given child type */

@@ -17,15 +17,16 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS items (
     id TEXT PRIMARY KEY,  -- UUID as TEXT
     type TEXT NOT NULL CHECK (type IN (
-        'capability', 'feature', 'epic',
-        'business_story', 'technical_story', 'test_case'
+        'capability', 'feature', 'user_story', 'test_case'
     )),
     parent_id TEXT REFERENCES items(id) ON DELETE RESTRICT,
     title TEXT NOT NULL,
     description TEXT,
 
     -- Classification
-    status TEXT NOT NULL DEFAULT 'backlog',
+    status TEXT NOT NULL DEFAULT 'todo' CHECK (status IN (
+        'todo', 'in_progress', 'test', 'done', 'blocked', 'cancelled', 'needs_info'
+    )),
     previous_state TEXT,
     priority INTEGER DEFAULT 0 CHECK (priority BETWEEN 0 AND 100),
     labels TEXT DEFAULT '[]',  -- JSON array of strings
@@ -54,7 +55,10 @@ CREATE TABLE IF NOT EXISTS items (
 
     -- Audit
     created_by TEXT NOT NULL REFERENCES users(id),
-    updated_by TEXT REFERENCES users(id)
+    updated_by TEXT REFERENCES users(id),
+    
+    -- Actor type for quick queries
+    actor_type TEXT CHECK (actor_type IN ('human', 'ai', 'system'))
 );
 
 -- Indexes for items
@@ -70,6 +74,7 @@ CREATE TABLE IF NOT EXISTS audit_events (
     id TEXT PRIMARY KEY,
     timestamp TEXT NOT NULL DEFAULT (datetime('now')),
     actor_id TEXT NOT NULL REFERENCES users(id),
+    actor_type TEXT CHECK (actor_type IN ('human', 'ai', 'system')),
     action_type TEXT NOT NULL CHECK (action_type IN ('STATE_CHANGE', 'BLOCK', 'UNBLOCK')),
     entity_type TEXT NOT NULL CHECK (entity_type IN ('item')),
     entity_id TEXT NOT NULL,
@@ -126,10 +131,8 @@ BEGIN
         WHERE parent.id = NEW.parent_id
           AND (
               (NEW.type = 'feature' AND parent.type = 'capability') OR
-              (NEW.type = 'epic' AND parent.type = 'feature') OR
-              (NEW.type = 'business_story' AND parent.type = 'epic') OR
-              (NEW.type = 'technical_story' AND parent.type = 'epic') OR
-              (NEW.type = 'test_case' AND parent.type IN ('business_story', 'technical_story'))
+              (NEW.type = 'user_story' AND parent.type = 'feature') OR
+              (NEW.type = 'test_case' AND parent.type = 'user_story')
           )
     );
 END;
@@ -149,10 +152,8 @@ BEGIN
         WHERE parent.id = NEW.parent_id
           AND (
               (NEW.type = 'feature' AND parent.type = 'capability') OR
-              (NEW.type = 'epic' AND parent.type = 'feature') OR
-              (NEW.type = 'business_story' AND parent.type = 'epic') OR
-              (NEW.type = 'technical_story' AND parent.type = 'epic') OR
-              (NEW.type = 'test_case' AND parent.type IN ('business_story', 'technical_story'))
+              (NEW.type = 'user_story' AND parent.type = 'feature') OR
+              (NEW.type = 'test_case' AND parent.type = 'user_story')
           )
     );
 END;
