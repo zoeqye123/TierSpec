@@ -10,7 +10,16 @@ import { createHierarchyTools, registerHierarchyTools, type HierarchyToolsOption
 import { queryToolDefinitions, getItemTree, listItems, searchItems, registerQueryTools } from './tools/query.js';
 import { ensureWorkflowSchema, blockItem, transitionState } from './tools/workflow.js';
 import { createSprintTools, registerSprintTools, type SprintToolsOptions } from './tools/sprint.js';
+import {
+  processSprintItems,
+  updateStory,
+  askClarification,
+  ensureAgentSchema,
+  registerAgentTools,
+  type AgentToolsOptions,
+} from './tools/agent.js';
 import { blockItemInputSchema, transitionStateInputSchema } from './schemas/workflow.js';
+import { processSprintItemsSchema, updateStorySchema, askClarificationSchema } from './schemas/agent.js';
 
 export const SERVER_INFO = {
   name: '@tierspec/mcp-server',
@@ -32,6 +41,9 @@ export const ALL_TOOL_NAMES = [
   'create_sprint',
   'assign_to_sprint',
   'get_sprint_status',
+  'process_sprint_items',
+  'ask_clarification',
+  'update_story',
 ] as const;
 
 const workflowToolDefinitions = {
@@ -148,6 +160,10 @@ export function registerAllTools(server: McpServer, database: Database, actorUse
     database,
     actorUserId,
   } satisfies SprintToolsOptions);
+  registerAgentTools(server as Parameters<typeof registerAgentTools>[0], {
+    database,
+    actorUserId,
+  } satisfies AgentToolsOptions);
 
   return ALL_TOOL_NAMES;
 }
