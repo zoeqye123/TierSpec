@@ -19,7 +19,7 @@ describe('workflow tools', () => {
   });
 
   afterEach(() => {
-    testDb.cleanup();
+    testDb?.cleanup();
   });
 
   it('transition_state logs state changes to the audit trail', () => {
@@ -209,5 +209,62 @@ describe('workflow tools', () => {
     expect(unblocked.blocker_type).toBeNull();
     expect(unblocked.blocker_detected_at).toBeNull();
     expect(unblocked.blocker_expected_resolution).toBeNull();
+  });
+
+  it('transition_state rejects AI actor transitioning to done', () => {
+    const item = insertItem(testDb.database, {
+      id: 'item-ai-done',
+      type: ItemType.Capability,
+      title: 'AI cannot mark done',
+    });
+
+    testDb.database.prepare('UPDATE items SET status = ?, updated_by = ? WHERE id = ?').run('test', 'user-1', item.id);
+
+    expect(() =>
+      transitionState(testDb.database, {
+        item_id: item.id,
+        new_state: 'done',
+        actor_id: 'ai-agent-1',
+        actor_type: 'ai',
+      }),
+    ).toThrow(/Only human actors can transition to "done"/);
+  });
+
+  it('transition_state allows human actor to transition to done', () => {
+    const item = insertItem(testDb.database, {
+      id: 'item-human-done',
+      type: ItemType.Capability,
+      title: 'Human can mark done',
+    });
+
+    testDb.database.prepare('UPDATE items SET status = ?, updated_by = ? WHERE id = ?').run('test', 'user-1', item.id);
+
+    const updated = transitionState(testDb.database, {
+      item_id: item.id,
+      new_state: 'done',
+      actor_id: 'user-1',
+      actor_type: 'human',
+    });
+
+    expect(updated.status).toBe('done');
+  });
+
+  it('transition_state defaults actor_type to human', () => {
+    const item = insertItem(testDb.database, {
+      id: 'item-default-actor',
+      type: ItemType.Capability,
+      title: 'Default actor type',
+    });
+
+    testDb.database.prepare('UPDATE items SET status = ?, updated_by = ? WHERE id = ?').run('test', 'user-1', item.id);
+
+    // Without actor_type, should default to 'human' and succeed
+    const updated = transitionState(testDb.database, {
+      item_id: item.id,
+      new_state: 'done',
+      actor_id: 'user-1',
+    });
+
+    expect(updated.status).toBe('done');
   });
 });

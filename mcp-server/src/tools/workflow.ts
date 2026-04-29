@@ -145,7 +145,7 @@ export function transitionState(database: Database, input: TransitionStateInput)
       throw new Error('Use block_item to move an item into blocked state so blocker metadata is captured.');
     }
 
-    assertValidStateTransition(item.status, parsed.new_state, { previousState: item.previous_state });
+    assertValidStateTransition(item.status, parsed.new_state, parsed.actor_type, { previousState: item.previous_state });
 
     const isUnblock = item.status === 'blocked' && parsed.new_state === item.previous_state;
 
@@ -194,7 +194,7 @@ export function blockItem(database: Database, input: BlockItemInput): WorkflowIt
     ensureWorkflowSchema(database);
 
     const item = getItemOrThrow(database, parsed.item_id);
-    assertValidStateTransition(item.status, 'blocked', { previousState: item.previous_state });
+    assertValidStateTransition(item.status, 'blocked', 'human', { previousState: item.previous_state });
 
     const blockedAt = new Date().toISOString();
     const previousState = item.status === 'blocked' ? item.previous_state : item.status;

@@ -9,6 +9,7 @@ export const transitionStateInputSchema = z.object({
   new_state: workflowStateSchema,
   reason: z.string().trim().optional(),
   actor_id: z.string().trim().min(1, 'actor_id is required').default('system'),
+  actor_type: z.enum(['human', 'ai', 'system']).default('human'),
 });
 
 export const blockItemInputSchema = z.object({
