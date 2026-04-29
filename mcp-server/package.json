@@ -12,10 +12,12 @@
     "README.md"
   ],
   "scripts": {
+    "pretest": "./scripts/check-node-runtime.sh && ./scripts/ensure-node-binaries-executable.sh",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "node ./node_modules/vitest/vitest.mjs run",
+    "test:watch": "node ./node_modules/vitest/vitest.mjs",
+    "monitor:4h": "./scripts/monitor-4h.sh",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -49,6 +51,6 @@
     "vitest": "^1.6.0"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20 <23"
   }
 }

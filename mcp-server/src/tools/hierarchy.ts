@@ -270,7 +270,7 @@ export function createHierarchyTools({ database, actorUserId }: HierarchyToolsOp
       parent_id: parsed.parent_id ?? null,
       title: parsed.title,
       description: parsed.description ?? null,
-      status: ItemStatus.Backlog,
+      status: ItemStatus.Todo,
       priority: 0,
       labels: '[]',
       position: getNextPosition(parsed.parent_id ?? null),

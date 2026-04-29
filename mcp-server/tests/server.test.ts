@@ -17,7 +17,7 @@ describe('MCP server integration', () => {
   });
 
   afterEach(() => {
-    testDb.cleanup();
+    testDb?.cleanup();
   });
 
   it('creates a server runtime with all tools registered', () => {

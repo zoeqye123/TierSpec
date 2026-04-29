@@ -13,7 +13,7 @@ describe('closure table maintenance', () => {
   });
 
   afterEach(() => {
-    testDb.cleanup();
+    testDb?.cleanup();
   });
 
   it('closure trigger fires on insert', () => {
@@ -57,17 +57,17 @@ describe('closure table maintenance', () => {
       parent_id: capability.id,
       title: 'Feature',
     });
-    const epic = insertItem(testDb.database, {
-      id: 'epic-1',
-      type: ItemType.Epic,
+    const userStory = insertItem(testDb.database, {
+      id: 'story-1',
+      type: ItemType.UserStory,
       parent_id: feature.id,
-      title: 'Epic',
+      title: 'User Story',
     });
 
     expect(() => {
       testDb.database
         .prepare('UPDATE items SET parent_id = ?, updated_by = ? WHERE id = ?')
-        .run(epic.id, 'user-1', capability.id);
+        .run(userStory.id, 'user-1', capability.id);
     }).toThrow(/circular reference/i);
   });
 
@@ -88,11 +88,11 @@ describe('closure table maintenance', () => {
       parent_id: capabilityA.id,
       title: 'Feature',
     });
-    const epic = insertItem(testDb.database, {
-      id: 'epic-1',
-      type: ItemType.Epic,
+    const userStory = insertItem(testDb.database, {
+      id: 'story-1',
+      type: ItemType.UserStory,
       parent_id: feature.id,
-      title: 'Epic',
+      title: 'User Story',
     });
 
     testDb.database
@@ -108,24 +108,24 @@ describe('closure table maintenance', () => {
       )
       .all(feature.id) as Array<{ ancestor_id: string; descendant_id: string; depth: number }>;
 
-    const epicPaths = testDb.database
+    const userStoryPaths = testDb.database
       .prepare(
         `SELECT ancestor_id, descendant_id, depth
          FROM item_paths
          WHERE descendant_id = ?
          ORDER BY depth, ancestor_id`,
       )
-      .all(epic.id) as Array<{ ancestor_id: string; descendant_id: string; depth: number }>;
+      .all(userStory.id) as Array<{ ancestor_id: string; descendant_id: string; depth: number }>;
 
     expect(featurePaths).toEqual([
       { ancestor_id: feature.id, descendant_id: feature.id, depth: 0 },
       { ancestor_id: capabilityB.id, descendant_id: feature.id, depth: 1 },
     ]);
 
-    expect(epicPaths).toEqual([
-      { ancestor_id: epic.id, descendant_id: epic.id, depth: 0 },
-      { ancestor_id: feature.id, descendant_id: epic.id, depth: 1 },
-      { ancestor_id: capabilityB.id, descendant_id: epic.id, depth: 2 },
+    expect(userStoryPaths).toEqual([
+      { ancestor_id: userStory.id, descendant_id: userStory.id, depth: 0 },
+      { ancestor_id: feature.id, descendant_id: userStory.id, depth: 1 },
+      { ancestor_id: capabilityB.id, descendant_id: userStory.id, depth: 2 },
     ]);
   });
 });

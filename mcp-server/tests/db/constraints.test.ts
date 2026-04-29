@@ -13,7 +13,7 @@ describe('database constraints', () => {
   });
 
   afterEach(() => {
-    testDb.cleanup();
+    testDb?.cleanup();
   });
 
   it('valid_parent_type rejects invalid parent-child combinations', () => {

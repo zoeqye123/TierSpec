@@ -14,7 +14,7 @@ describe('hierarchy CRUD tools', () => {
   });
 
   afterEach(() => {
-    testDb.cleanup();
+    testDb?.cleanup();
   });
 
   it('create_item creates item with valid type', () => {
@@ -56,7 +56,7 @@ describe('hierarchy CRUD tools', () => {
 
     expect(() =>
       tools.createItem({
-        type: ItemType.BusinessStory,
+        type: ItemType.UserStory,
         title: 'Story',
         parent_id: capability.id,
       }),
@@ -76,10 +76,10 @@ describe('hierarchy CRUD tools', () => {
       title: 'Feature',
     });
     insertItem(testDb.database, {
-      id: 'epic-1',
-      type: ItemType.Epic,
+      id: 'story-1',
+      type: ItemType.UserStory,
       parent_id: feature.id,
-      title: 'Epic',
+      title: 'User Story',
     });
 
     const tools = createHierarchyTools({
@@ -92,7 +92,7 @@ describe('hierarchy CRUD tools', () => {
     expect(item.id).toBe(capability.id);
     expect(item.children).toHaveLength(1);
     expect(item.children[0]?.id).toBe(feature.id);
-    expect(item.children[0]?.children[0]?.title).toBe('Epic');
+    expect(item.children[0]?.children[0]?.title).toBe('User Story');
   });
 
   it('move_item updates parent and closure table', () => {
@@ -112,11 +112,11 @@ describe('hierarchy CRUD tools', () => {
       parent_id: capabilityA.id,
       title: 'Feature',
     });
-    const epic = insertItem(testDb.database, {
-      id: 'epic-1',
-      type: ItemType.Epic,
+    const userStory = insertItem(testDb.database, {
+      id: 'story-1',
+      type: ItemType.UserStory,
       parent_id: feature.id,
-      title: 'Epic',
+      title: 'User Story',
     });
 
     const tools = createHierarchyTools({
@@ -138,24 +138,24 @@ describe('hierarchy CRUD tools', () => {
       )
       .all(feature.id) as Array<{ ancestor_id: string; descendant_id: string; depth: number }>;
 
-    const epicPaths = testDb.database
+    const userStoryPaths = testDb.database
       .prepare(
         `SELECT ancestor_id, descendant_id, depth
          FROM item_paths
          WHERE descendant_id = ?
          ORDER BY depth, ancestor_id`,
       )
-      .all(epic.id) as Array<{ ancestor_id: string; descendant_id: string; depth: number }>;
+      .all(userStory.id) as Array<{ ancestor_id: string; descendant_id: string; depth: number }>;
 
     expect(moved.parent_id).toBe(capabilityB.id);
     expect(featurePaths).toEqual([
       { ancestor_id: feature.id, descendant_id: feature.id, depth: 0 },
       { ancestor_id: capabilityB.id, descendant_id: feature.id, depth: 1 },
     ]);
-    expect(epicPaths).toEqual([
-      { ancestor_id: epic.id, descendant_id: epic.id, depth: 0 },
-      { ancestor_id: feature.id, descendant_id: epic.id, depth: 1 },
-      { ancestor_id: capabilityB.id, descendant_id: epic.id, depth: 2 },
+    expect(userStoryPaths).toEqual([
+      { ancestor_id: userStory.id, descendant_id: userStory.id, depth: 0 },
+      { ancestor_id: feature.id, descendant_id: userStory.id, depth: 1 },
+      { ancestor_id: capabilityB.id, descendant_id: userStory.id, depth: 2 },
     ]);
   });
 
@@ -245,10 +245,10 @@ describe('hierarchy CRUD tools', () => {
       title: 'Feature',
     });
     insertItem(testDb.database, {
-      id: 'epic-1',
-      type: ItemType.Epic,
+      id: 'story-1',
+      type: ItemType.UserStory,
       parent_id: feature.id,
-      title: 'Epic',
+      title: 'User Story',
     });
 
     const tools = createHierarchyTools({
@@ -260,7 +260,7 @@ describe('hierarchy CRUD tools', () => {
 
     const tree = tools.getItem({ id: capability.id });
     expect(tree.children.map((item) => item.id)).toEqual([feature.id]);
-    expect(tree.children[0]?.children.map((item) => item.id)).toEqual(['epic-1']);
+    expect(tree.children[0]?.children.map((item) => item.id)).toEqual(['story-1']);
   });
 
   it('delete_item cascade deletes children', () => {
@@ -275,11 +275,11 @@ describe('hierarchy CRUD tools', () => {
       parent_id: capability.id,
       title: 'Feature',
     });
-    const epic = insertItem(testDb.database, {
-      id: 'epic-1',
-      type: ItemType.Epic,
+    const userStory = insertItem(testDb.database, {
+      id: 'story-1',
+      type: ItemType.UserStory,
       parent_id: feature.id,
-      title: 'Epic',
+      title: 'User Story',
     });
 
     const tools = createHierarchyTools({
@@ -291,11 +291,11 @@ describe('hierarchy CRUD tools', () => {
 
     const deletedRows = testDb.database
       .prepare('SELECT id, deleted_at FROM items WHERE id IN (?, ?) ORDER BY id')
-      .all(epic.id, feature.id) as Array<{ id: string; deleted_at: string | null }>;
+      .all(userStory.id, feature.id) as Array<{ id: string; deleted_at: string | null }>;
 
     expect(deletedRows).toEqual([
-      { id: 'epic-1', deleted_at: expect.any(String) },
       { id: 'feature-1', deleted_at: expect.any(String) },
+      { id: 'story-1', deleted_at: expect.any(String) },
     ]);
   });
 
@@ -327,7 +327,7 @@ describe('hierarchy CRUD tools', () => {
       id: 'cap-1',
       type: ItemType.Capability,
       title: 'Capability',
-      status: ItemStatus.Backlog,
+      status: ItemStatus.Todo,
       priority: 0,
     });
 
@@ -358,11 +358,11 @@ describe('hierarchy CRUD tools', () => {
       parent_id: capability.id,
       title: 'Feature',
     });
-    const epic = insertItem(testDb.database, {
-      id: 'epic-1',
-      type: ItemType.Epic,
+    const userStory = insertItem(testDb.database, {
+      id: 'story-1',
+      type: ItemType.UserStory,
       parent_id: feature.id,
-      title: 'Epic',
+      title: 'User Story',
     });
 
     const tools = createHierarchyTools({
@@ -371,7 +371,7 @@ describe('hierarchy CRUD tools', () => {
     });
 
     const updated = tools.updateItem({
-      item_id: epic.id,
+      item_id: userStory.id,
       story_points: 13,
       complexity: Complexity.L,
     });
