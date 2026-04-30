@@ -69,6 +69,10 @@ CREATE INDEX IF NOT EXISTS idx_items_position ON items(parent_id, position) WHER
 CREATE INDEX IF NOT EXISTS idx_items_created_by ON items(created_by);
 CREATE INDEX IF NOT EXISTS idx_items_updated_by ON items(updated_by);
 
+-- Composite indexes for Kanban and sprint queries
+CREATE INDEX IF NOT EXISTS idx_items_parent_status ON items(parent_id, status) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_items_status_type ON items(status, type) WHERE deleted_at IS NULL;
+
 -- Audit events for workflow/state changes
 CREATE TABLE IF NOT EXISTS audit_events (
     id TEXT PRIMARY KEY,
@@ -321,6 +325,7 @@ CREATE TABLE IF NOT EXISTS sprint_assignments (
 
 CREATE INDEX IF NOT EXISTS idx_sprint_assignments_item ON sprint_assignments(item_id) WHERE removed_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_sprint_assignments_sprint ON sprint_assignments(sprint_id);
+CREATE INDEX IF NOT EXISTS idx_sprint_assignments_active ON sprint_assignments(sprint_id, removed_at);
 
 -- Trigger: Auto-update sprint updated_at
 CREATE TRIGGER IF NOT EXISTS update_sprints_timestamp

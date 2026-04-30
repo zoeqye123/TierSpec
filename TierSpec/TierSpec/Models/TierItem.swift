@@ -78,6 +78,9 @@ final class TierItem {
     /// Soft delete timestamp
     var deletedAt: Date?
     
+    /// Display ID for user-friendly identification (e.g., "CAP-001", "FEAT-042")
+    var displayId: String?
+    
     // MARK: - Labels
     
     /// Labels/tags for categorization

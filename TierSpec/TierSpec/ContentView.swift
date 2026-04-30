@@ -9,10 +9,11 @@ import SwiftUI
 import SwiftData
 
 struct ContentView: View {
+    var projectName: String
     @Environment(\.modelContext) private var modelContext
     
     var body: some View {
-        ContentViewWithStore(modelContext: modelContext)
+        ContentViewWithStore(modelContext: modelContext, projectName: projectName)
     }
 }
 
@@ -21,9 +22,12 @@ private struct ContentViewWithStore: View {
     @State private var selectedSprint: Sprint?
     @State private var searchText: String = ""
     @State private var sidebarTab: SidebarTab = .hierarchy
+    @State private var showingCreateSprint = false
+    let projectName: String
     
-    init(modelContext: ModelContext) {
+    init(modelContext: ModelContext, projectName: String) {
         _treeStore = StateObject(wrappedValue: TreeStore(modelContext: modelContext))
+        self.projectName = projectName
     }
     
     private enum SidebarTab: String, CaseIterable {
@@ -49,15 +53,22 @@ private struct ContentViewWithStore: View {
                         )
                     }
                 case .sprints:
-                    SprintListView()
+                    KanbanView()
                 }
             }
             .frame(minWidth: 250)
-            .navigationTitle("TierSpec")
+            .navigationTitle(projectName)
             .toolbar {
                 ToolbarItem {
-                    Button(action: addCapability) {
-                        Label("Add Capability", systemImage: "plus")
+                    switch sidebarTab {
+                    case .hierarchy:
+                        Button(action: addCapability) {
+                            Label("Add Capability", systemImage: "plus")
+                        }
+                    case .sprints:
+                        Button(action: createNewSprint) {
+                            Label("New Sprint", systemImage: "plus")
+                        }
                     }
                 }
             }
@@ -73,6 +84,9 @@ private struct ContentViewWithStore: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
+        .sheet(isPresented: $showingCreateSprint) {
+            SprintFormView()
+        }
         .task {
             await treeStore.loadTree()
         }
@@ -140,6 +154,10 @@ private struct ContentViewWithStore: View {
         }
     }
     
+    private func createNewSprint() {
+        showingCreateSprint = true
+    }
+    
     private func addChild(to parent: TierItem, type: ItemType) {
         let nextPosition = Double(parent.children?.count ?? 0)
         let child = TierItem(
@@ -178,6 +196,6 @@ private struct ContentViewWithStore: View {
 }
 
 #Preview {
-    ContentView()
+    ContentView(projectName: "My Project")
         .modelContainer(for: TierItem.self, inMemory: true)
 }

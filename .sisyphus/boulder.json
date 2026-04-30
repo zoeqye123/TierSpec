@@ -1,0 +1,15 @@
+{
+  "active_plan": "/Users/z/project/tierspec/.sisyphus/plans/sprint-kanban-fix.md",
+  "started_at": "2026-04-29T12:13:38.715Z",
+  "session_ids": [
+    "ses_227358b1dffehASEY3cx0IIPhi",
+    "ses_226d6c718ffeWY6Wqqak1lRy1z"
+  ],
+  "session_origins": {
+    "ses_227358b1dffehASEY3cx0IIPhi": "direct",
+    "ses_226d6c718ffeWY6Wqqak1lRy1z": "appended"
+  },
+  "plan_name": "sprint-kanban-fix",
+  "agent": "atlas",
+  "task_sessions": {}
+}

@@ -22,6 +22,9 @@ struct KanbanView: View {
     @State private var selectedSprint: Sprint?
     @State private var validationError: StateMachineError?
     @State private var showErrorAlert = false
+    @State private var showingCreateSprint = false
+    @State private var showingAISuggestions = false
+    @State private var aiSuggestions: [SprintAssignmentSuggestion] = []
     
     private var userStories: [TierItem] {
         if let sprint = selectedSprint {
@@ -49,6 +52,18 @@ struct KanbanView: View {
             kanbanBoard
         }
         .navigationTitle("Kanban Board")
+        .onAppear {
+            selectDefaultSprint()
+        }
+        .sheet(isPresented: $showingCreateSprint) {
+            SprintFormView()
+        }
+        .sheet(isPresented: $showingAISuggestions) {
+            AISuggestionsView(
+                suggestions: $aiSuggestions,
+                onApply: applySuggestion
+            )
+        }
         .sheet(item: $selectedItem) { item in
             ItemDetailView(item: item)
         }
@@ -71,6 +86,22 @@ struct KanbanView: View {
             }
             .pickerStyle(.menu)
             .frame(minWidth: 200)
+            
+            Button {
+                showingCreateSprint = true
+            } label: {
+                Label("New Sprint", systemImage: "plus")
+            }
+            .buttonStyle(.bordered)
+            
+            Button {
+                generateAISuggestions()
+                showingAISuggestions = true
+            } label: {
+                Label("AI Assign", systemImage: "sparkles")
+            }
+            .buttonStyle(.bordered)
+            .disabled(unassignedStories.isEmpty)
             
             Spacer()
             
@@ -148,6 +179,18 @@ struct KanbanView: View {
         sprint.committedPoints = sprintItems.compactMap { $0.storyPoints }.reduce(0, +)
         sprint.completedPoints = sprintItems.filter { $0.status == .done }.compactMap { $0.storyPoints }.reduce(0, +)
         sprint.touch()
+    }
+    
+    private func selectDefaultSprint() {
+        guard selectedSprint == nil else { return }
+        
+        // First, try to find an active sprint
+        if let activeSprint = sprints.first(where: { $0.status == .active }) {
+            selectedSprint = activeSprint
+        } else if let firstSprint = sprints.first {
+            // Fall back to the first sprint
+            selectedSprint = firstSprint
+        }
     }
 }
 
@@ -252,6 +295,13 @@ struct KanbanCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
+                if let displayId = item.displayId {
+                    Text(displayId)
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.blue)
+                }
+                
                 Image(systemName: item.type.icon)
                     .font(.caption)
                     .foregroundStyle(item.status.color)

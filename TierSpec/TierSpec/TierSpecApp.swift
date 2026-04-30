@@ -42,7 +42,7 @@ private struct ProjectWindowCommands: Commands {
             Divider()
 
             Button("New Project") {
-                projectManager?.createNewProject()
+                projectManager?.requestNewProject()
             }
             .keyboardShortcut("n", modifiers: [.command, .shift])
             .disabled(projectManager == nil)
@@ -81,8 +81,9 @@ private struct ProjectWindowSceneView: View {
     var body: some View {
         Group {
             if let project = projectManager.currentProject {
-                ContentView()
+                ContentView(projectName: project.name)
                     .modelContainer(project.modelContainer)
+                    .navigationTitle(project.name)
             } else {
                 WelcomeView(projectManager: projectManager)
             }
@@ -96,6 +97,10 @@ class ProjectManager {
     var currentProject: ProjectContext?
     private var openProjects: [UUID: ProjectContext] = [:]
     
+    // Dialog state for new project name
+    var showingNewProjectDialog = false
+    var newProjectName = ""
+    
     private let projectsDirectory: URL = {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let dir = appSupport.appendingPathComponent("TierSpec/Projects", isDirectory: true)
@@ -104,6 +109,11 @@ class ProjectManager {
         }
         return dir
     }()
+    
+    func requestNewProject() {
+        newProjectName = ""
+        showingNewProjectDialog = true
+    }
     
     func createNewProject() {
         let id = UUID()
@@ -115,6 +125,39 @@ class ProjectManager {
         )
         openProjects[id] = project
         currentProject = project
+    }
+    
+    func createProject(named name: String) {
+        guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        
+        let id = UUID()
+        let dbPath = projectsDirectory.appendingPathComponent("\(id.uuidString).db").path
+        let project = ProjectContext(
+            id: id,
+            name: name.trimmingCharacters(in: .whitespaces),
+            databasePath: dbPath
+        )
+        openProjects[id] = project
+        currentProject = project
+        
+        // Auto-create Sprint 1 (2 weeks from today, status: planning)
+        createDefaultSprint(in: project.modelContainer)
+    }
+    
+    private func createDefaultSprint(in container: ModelContainer) {
+        let context = container.mainContext
+        let today = Date()
+        let calendar = Calendar.current
+        guard let endDate = calendar.date(byAdding: .day, value: 14, to: today) else { return }
+        
+        let sprint = Sprint(
+            name: "Sprint 1",
+            startDate: today,
+            endDate: endDate,
+            status: .planning
+        )
+        context.insert(sprint)
+        try? context.save()
     }
     
     func openProject() {
@@ -201,7 +244,7 @@ struct WelcomeView: View {
             
             VStack(spacing: 12) {
                 Button {
-                    projectManager.createNewProject()
+                    projectManager.requestNewProject()
                 } label: {
                     Label("New Project", systemImage: "plus")
                         .frame(maxWidth: 200)
@@ -220,5 +263,24 @@ struct WelcomeView: View {
             }
         }
         .frame(minWidth: 400, minHeight: 300)
+        .alert("New Project", isPresented: Binding(
+            get: { projectManager.showingNewProjectDialog },
+            set: { projectManager.showingNewProjectDialog = $0 }
+        )) {
+            TextField("Project name", text: Binding(
+                get: { projectManager.newProjectName },
+                set: { projectManager.newProjectName = $0 }
+            ))
+            Button("Cancel", role: .cancel) {
+                projectManager.newProjectName = ""
+            }
+            Button("Create") {
+                projectManager.createProject(named: projectManager.newProjectName)
+                projectManager.newProjectName = ""
+            }
+            .disabled(projectManager.newProjectName.trimmingCharacters(in: .whitespaces).isEmpty)
+        } message: {
+            Text("Enter a name for your new project.")
+        }
     }
 }

@@ -15,6 +15,7 @@ final class Project {
     var databasePath: String
     var createdAt: Date
     var updatedAt: Date
+    var lastUserStoryNumber: Int = 0
     
     init(
         id: UUID = UUID(),
