@@ -63,9 +63,23 @@ final class TreeStore: ObservableObject {
     
     /// Move a node to a new parent
     func moveNode(_ item: TierItem, to newParent: TierItem?) async {
+        let oldParent = item.parent
+        
         do {
             try await repository.move(item, to: newParent)
-            await loadTree()
+            
+            // Incremental update: refresh both old and new parent subtrees
+            if let oldParent = oldParent {
+                await refreshNode(oldParent)
+            } else {
+                rootItems = try await repository.fetchRoot()
+            }
+            
+            if let newParent = newParent, newParent.id != oldParent?.id {
+                await refreshNode(newParent)
+            } else if newParent == nil && oldParent != nil {
+                rootItems = try await repository.fetchRoot()
+            }
         } catch {
             self.error = error
         }
@@ -80,7 +94,8 @@ final class TreeStore: ObservableObject {
         
         do {
             try await repository.reorderChildren(of: parent, from: sourceIndex, to: destinationIndex)
-            await loadTree()
+            // Incremental update: only refresh parent's children
+            await refreshNode(parent)
         } catch {
             self.error = error
         }
@@ -117,7 +132,13 @@ final class TreeStore: ObservableObject {
             } else {
                 try await repository.create(item)
             }
-            await loadTree()
+            // Incremental update: only refresh affected subtree
+            if let parent = parent {
+                await refreshNode(parent)
+            } else {
+                // New root item - refresh root list only
+                rootItems = try await repository.fetchRoot()
+            }
         } catch {
             self.error = error
         }
@@ -127,7 +148,8 @@ final class TreeStore: ObservableObject {
     func updateItem(_ item: TierItem) async {
         do {
             try await repository.update(item)
-            await loadTree()
+            // No tree structure change - no refresh needed
+            // SwiftData will propagate changes via @Published
         } catch {
             self.error = error
         }
@@ -137,7 +159,13 @@ final class TreeStore: ObservableObject {
     func deleteItem(_ item: TierItem) async {
         do {
             try await repository.delete(item)
-            await loadTree()
+            // Incremental update: refresh parent's children
+            if let parent = item.parent {
+                await refreshNode(parent)
+            } else {
+                // Root item deleted - refresh root list
+                rootItems = try await repository.fetchRoot()
+            }
         } catch {
             self.error = error
         }
@@ -147,7 +175,13 @@ final class TreeStore: ObservableObject {
     func restoreItem(_ item: TierItem) async {
         do {
             try await repository.restore(item)
-            await loadTree()
+            // Incremental update: refresh parent's children
+            if let parent = item.parent {
+                await refreshNode(parent)
+            } else {
+                // Root item restored - refresh root list
+                rootItems = try await repository.fetchRoot()
+            }
         } catch {
             self.error = error
         }

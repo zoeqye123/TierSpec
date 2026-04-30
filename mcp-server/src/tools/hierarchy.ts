@@ -16,25 +16,7 @@ import {
   type ReorderItemsInput,
   type UpdateItemInput,
 } from '../schemas/hierarchy.js';
-
-type ToolRegistrar = {
-  registerTool(
-    name: string,
-    config: {
-      title?: string;
-      description?: string;
-      inputSchema?: unknown;
-      annotations?: {
-        title?: string;
-        readOnlyHint?: boolean;
-        destructiveHint?: boolean;
-        idempotentHint?: boolean;
-        openWorldHint?: boolean;
-      };
-    },
-    cb: (args: any) => Promise<{ content: Array<{ type: 'text'; text: string }>; structuredContent?: unknown }> | { content: Array<{ type: 'text'; text: string }>; structuredContent?: unknown },
-  ): unknown;
-};
+import type { ToolRegistrar } from '../types/tool-registrar.js';
 
 type ItemRow = Omit<Item, 'labels' | 'ai_generated'> & {
   labels: string;
@@ -229,26 +211,25 @@ export function createHierarchyTools({ database, actorUserId }: HierarchyToolsOp
     return (row?.max_position ?? -1) + 1;
   }
 
-  function buildTree(rootId: string) {
+  function buildTree(rootId: string): ItemTree {
     const rows = getDescendantRows.all(rootId).map(toItem);
     if (rows.length === 0) {
       throw new Error(missingItemMessage(rootId));
     }
 
     const nodes = new Map<string, ItemTree>();
-    for (const item of rows) {
-      nodes.set(item.id, { ...item, children: [] });
-    }
-
     let root: ItemTree | undefined;
-    for (const item of nodes.values()) {
-      if (item.id === rootId) {
-        root = item;
-        continue;
-      }
 
-      const parent = item.parent_id ? nodes.get(item.parent_id) : undefined;
-      parent?.children.push(item);
+    for (const item of rows) {
+      const node: ItemTree = { ...item, children: [] };
+      nodes.set(item.id, node);
+
+      if (item.id === rootId) {
+        root = node;
+      } else if (item.parent_id) {
+        const parent = nodes.get(item.parent_id);
+        parent?.children.push(node);
+      }
     }
 
     if (!root) {
@@ -399,17 +380,62 @@ export function registerHierarchyTools(server: ToolRegistrar, options: Hierarchy
     'create_item',
     {
       title: 'Create Item',
-      description: 'Create a hierarchy item under a valid parent.',
+      description: 'Create a new item in the hierarchy',
       inputSchema: createItemSchema,
-      annotations: {
-        title: 'Create Item',
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: false,
-      },
     },
-    async (args) => formatResult(tools.createItem(args)),
+    (args) => createItem(database, args as CreateItemInput),
+  );
+
+  server.registerTool(
+    'get_item',
+    {
+      title: 'Get Item',
+      description: 'Get an item by ID with its children',
+      inputSchema: getItemSchema,
+      annotations: { readOnlyHint: true },
+    },
+    (args) => getItem(database, args as GetItemInput),
+  );
+
+  server.registerTool(
+    'move_item',
+    {
+      title: 'Move Item',
+      description: 'Move an item to a new parent',
+      inputSchema: moveItemSchema,
+    },
+    (args) => moveItem(database, args as MoveItemInput),
+  );
+
+  server.registerTool(
+    'reorder_items',
+    {
+      title: 'Reorder Items',
+      description: 'Reorder items within a parent',
+      inputSchema: reorderItemsSchema,
+    },
+    (args) => reorderItems(database, args as ReorderItemsInput),
+  );
+
+  server.registerTool(
+    'delete_item',
+    {
+      title: 'Delete Item',
+      description: 'Soft delete an item',
+      inputSchema: deleteItemSchema,
+      annotations: { destructiveHint: true },
+    },
+    (args) => deleteItem(database, args as DeleteItemInput),
+  );
+
+  server.registerTool(
+    'update_item',
+    {
+      title: 'Update Item',
+      description: 'Update an existing item',
+      inputSchema: updateItemSchema,
+    },
+    (args) => updateItem(database, args as UpdateItemInput),
   );
 
   server.registerTool(
@@ -425,7 +451,7 @@ export function registerHierarchyTools(server: ToolRegistrar, options: Hierarchy
         openWorldHint: false,
       },
     },
-    async (args) => formatResult(tools.getItem(args)),
+    async (args) => formatResult(tools.getItem(args as GetItemInput)),
   );
 
   server.registerTool(
@@ -442,7 +468,7 @@ export function registerHierarchyTools(server: ToolRegistrar, options: Hierarchy
         openWorldHint: false,
       },
     },
-    async (args) => formatResult(tools.moveItem(args)),
+    async (args) => formatResult(tools.moveItem(args as MoveItemInput)),
   );
 
   server.registerTool(
@@ -459,7 +485,7 @@ export function registerHierarchyTools(server: ToolRegistrar, options: Hierarchy
         openWorldHint: false,
       },
     },
-    async (args) => formatResult(tools.reorderItems(args)),
+    async (args) => formatResult(tools.reorderItems(args as ReorderItemsInput)),
   );
 
   server.registerTool(
@@ -476,7 +502,7 @@ export function registerHierarchyTools(server: ToolRegistrar, options: Hierarchy
         openWorldHint: false,
       },
     },
-    async (args) => formatResult((tools.deleteItem(args), { success: true })),
+    async (args) => formatResult((tools.deleteItem(args as DeleteItemInput), { success: true })),
   );
 
   server.registerTool(
@@ -493,7 +519,7 @@ export function registerHierarchyTools(server: ToolRegistrar, options: Hierarchy
         openWorldHint: false,
       },
     },
-    async (args) => formatResult(tools.updateItem(args)),
+    async (args) => formatResult(tools.updateItem(args as UpdateItemInput)),
   );
 
   return tools;

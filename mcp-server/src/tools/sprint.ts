@@ -10,25 +10,7 @@ import {
   type AssignToSprintInput,
   type GetSprintStatusInput,
 } from '../schemas/sprint.js';
-
-type ToolRegistrar = {
-  registerTool(
-    name: string,
-    config: {
-      title?: string;
-      description?: string;
-      inputSchema?: unknown;
-      annotations?: {
-        title?: string;
-        readOnlyHint?: boolean;
-        destructiveHint?: boolean;
-        idempotentHint?: boolean;
-        openWorldHint?: boolean;
-      };
-    },
-    cb: (args: any) => Promise<{ content: Array<{ type: 'text'; text: string }>; structuredContent?: unknown }> | { content: Array<{ type: 'text'; text: string }>; structuredContent?: unknown },
-  ): unknown;
-};
+import type { ToolRegistrar } from '../types/tool-registrar.js';
 
 type SprintToolsOptions = {
   database: Database;
@@ -224,7 +206,7 @@ export function registerSprintTools(server: ToolRegistrar, options: SprintToolsO
         openWorldHint: false,
       },
     },
-    async (args) => formatResult(tools.createSprint(args)),
+    async (args) => formatResult(tools.createSprint(args as CreateSprintInput)),
   );
 
   server.registerTool(
@@ -241,7 +223,7 @@ export function registerSprintTools(server: ToolRegistrar, options: SprintToolsO
         openWorldHint: false,
       },
     },
-    async (args) => formatResult(tools.assignToSprint(args)),
+    async (args) => formatResult(tools.assignToSprint(args as AssignToSprintInput)),
   );
 
   server.registerTool(
@@ -257,7 +239,7 @@ export function registerSprintTools(server: ToolRegistrar, options: SprintToolsO
         openWorldHint: false,
       },
     },
-    async (args) => formatResult(tools.getSprintStatus(args)),
+    async (args) => formatResult(tools.getSprintStatus(args as GetSprintStatusInput)),
   );
 
   return tools;

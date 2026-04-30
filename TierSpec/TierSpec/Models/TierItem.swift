@@ -86,6 +86,12 @@ final class TierItem {
     /// Labels/tags for categorization
     var labels: [String]
     
+    // MARK: - Cached Properties
+    
+    @Transient private var cachedOutlineChildren: [TierItem]?
+    @Transient private var cachedDepth: Int?
+    @Transient private var cachedPath: [TierItem]?
+    
     // MARK: - Initializer
     
     init(
@@ -122,21 +128,28 @@ final class TierItem {
     
     // MARK: - Computed Properties
     
-    /// Children sorted by position for outline display
     var outlineChildren: [TierItem] {
-        (children ?? [])
+        if let cached = cachedOutlineChildren {
+            return cached
+        }
+        let result = (children ?? [])
             .filter { $0.deletedAt == nil }
             .sorted { $0.position < $1.position }
+        cachedOutlineChildren = result
+        return result
     }
     
-    /// Depth in hierarchy (0 = root)
     var depth: Int {
+        if let cached = cachedDepth {
+            return cached
+        }
         var currentDepth = 0
         var currentParent = parent
         while currentParent != nil {
             currentDepth += 1
             currentParent = currentParent?.parent
         }
+        cachedDepth = currentDepth
         return currentDepth
     }
     
@@ -155,31 +168,38 @@ final class TierItem {
         return deletedAt != nil
     }
     
-    /// Full path from root to this item
     var path: [TierItem] {
+        if let cached = cachedPath {
+            return cached
+        }
         var result: [TierItem] = [self]
         var currentParent = parent
         while let parent = currentParent {
             result.insert(parent, at: 0)
             currentParent = parent.parent
         }
+        cachedPath = result
         return result
     }
     
     // MARK: - Methods
     
-    /// Update the timestamp when modified
-    func touch() {
-        updatedAt = Date()
+    func invalidateCache() {
+        cachedOutlineChildren = nil
+        cachedDepth = nil
+        cachedPath = nil
     }
     
-    /// Soft delete this item
+    func touch() {
+        updatedAt = Date()
+        invalidateCache()
+    }
+    
     func softDelete() {
         deletedAt = Date()
         touch()
     }
     
-    /// Restore a soft-deleted item
     func restore() {
         deletedAt = nil
         touch()

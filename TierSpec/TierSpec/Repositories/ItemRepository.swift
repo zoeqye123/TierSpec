@@ -176,11 +176,34 @@ actor ItemRepository {
         return try modelContext.fetchCount(descriptor)
     }
     
+    func fetch(byType type: ItemType, sprint: Sprint?) throws -> [TierItem] {
+        let descriptor = FetchDescriptor<TierItem>(
+            predicate: #Predicate { item in
+                item.type == type && 
+                item.deletedAt == nil && 
+                item.sprint?.id == sprint?.id
+            },
+            sortBy: [SortDescriptor(\.priority, order: .reverse)]
+        )
+        return try modelContext.fetch(descriptor)
+    }
+    
+    func fetchUnassigned(byType type: ItemType) throws -> [TierItem] {
+        let descriptor = FetchDescriptor<TierItem>(
+            predicate: #Predicate { item in
+                item.type == type && 
+                item.deletedAt == nil && 
+                item.sprint == nil
+            },
+            sortBy: [SortDescriptor(\.priority, order: .reverse)]
+        )
+        return try modelContext.fetch(descriptor)
+    }
+    
     // MARK: - Hierarchy Operations
     
     /// Move an item to a new parent
     func move(_ item: TierItem, to newParent: TierItem?) throws {
-        // Validate the move
         if let newParent = newParent {
             guard newParent.canAddChild(ofType: item.type) else {
                 throw RepositoryError.invalidChildType(
@@ -189,18 +212,18 @@ actor ItemRepository {
                 )
             }
         } else {
-            // Moving to root - only capabilities allowed
             guard item.type == .capability else {
                 throw RepositoryError.invalidRootItem(type: item.type.displayName)
             }
         }
         
-        // Remove from old parent
-        if let oldParent = item.parent {
+        let oldParent = item.parent
+        
+        if let oldParent = oldParent {
             oldParent.children?.removeAll { $0.id == item.id }
+            oldParent.invalidateCache()
         }
         
-        // Add to new parent
         if let newParent = newParent {
             item.parent = newParent
             if newParent.children == nil {
@@ -208,6 +231,7 @@ actor ItemRepository {
             }
             newParent.children?.append(item)
             item.position = Double(newParent.children?.count ?? 0)
+            newParent.invalidateCache()
         } else {
             item.parent = nil
         }
@@ -228,12 +252,12 @@ actor ItemRepository {
         children.insert(movedItem, at: clampedDestination)
         parent.children = children
         
-        // Update positions
         for (index, child) in children.enumerated() {
             child.position = Double(index)
             child.touch()
         }
         
+        parent.invalidateCache()
         try modelContext.save()
     }
     

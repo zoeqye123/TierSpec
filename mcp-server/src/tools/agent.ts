@@ -11,25 +11,7 @@ import {
   type UpdateStoryInput,
   type AskClarificationInput,
 } from '../schemas/agent.js';
-
-type ToolRegistrar = {
-  registerTool(
-    name: string,
-    config: {
-      title?: string;
-      description?: string;
-      inputSchema?: unknown;
-      annotations?: {
-        title?: string;
-        readOnlyHint?: boolean;
-        destructiveHint?: boolean;
-        idempotentHint?: boolean;
-        openWorldHint?: boolean;
-      };
-    },
-    cb: (args: any) => Promise<{ content: Array<{ type: 'text'; text: string }>; structuredContent?: unknown }> | { content: Array<{ type: 'text'; text: string }>; structuredContent?: unknown },
-  ): unknown;
-};
+import type { ToolRegistrar } from '../types/tool-registrar.js';
 
 export type AgentToolsOptions = {
   database: Database;
@@ -324,7 +306,7 @@ export function registerAgentTools(server: ToolRegistrar, options: AgentToolsOpt
         openWorldHint: false,
       },
     },
-    async (args) => formatResult(processSprintItems(database, args)),
+    async (args) => formatResult(processSprintItems(database, args as ProcessSprintItemsInput)),
   );
 
   server.registerTool(
@@ -341,7 +323,7 @@ export function registerAgentTools(server: ToolRegistrar, options: AgentToolsOpt
         openWorldHint: false,
       },
     },
-    async (args) => formatResult(askClarification(database, args)),
+    async (args) => formatResult(askClarification(database, args as AskClarificationInput)),
   );
 
   server.registerTool(
@@ -358,6 +340,6 @@ export function registerAgentTools(server: ToolRegistrar, options: AgentToolsOpt
         openWorldHint: false,
       },
     },
-    async (args) => formatResult(updateStory(database, args, actorUserId)),
+    async (args) => formatResult(updateStory(database, args as UpdateStoryInput, actorUserId)),
   );
 }
