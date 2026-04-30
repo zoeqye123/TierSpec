@@ -105,7 +105,11 @@ class ProjectManager {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let dir = appSupport.appendingPathComponent("TierSpec/Projects", isDirectory: true)
         if !FileManager.default.fileExists(atPath: dir.path) {
-            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            do {
+                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            } catch {
+                assertionFailure("Failed to create projects directory at \(dir.path): \(error)")
+            }
         }
         return dir
     }()
@@ -148,7 +152,10 @@ class ProjectManager {
         let context = container.mainContext
         let today = Date()
         let calendar = Calendar.current
-        guard let endDate = calendar.date(byAdding: .day, value: 14, to: today) else { return }
+        guard let endDate = calendar.date(byAdding: .day, value: 14, to: today) else {
+            assertionFailure("Failed to calculate sprint end date")
+            return
+        }
         
         let sprint = Sprint(
             name: "Sprint 1",
@@ -157,7 +164,11 @@ class ProjectManager {
             status: .planning
         )
         context.insert(sprint)
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            assertionFailure("Failed to save default sprint: \(error)")
+        }
     }
     
     func openProject() {
@@ -212,7 +223,11 @@ struct ProjectContext: Identifiable {
         let directory = url.deletingLastPathComponent()
         
         if !FileManager.default.fileExists(atPath: directory.path) {
-            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            do {
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            } catch {
+                assertionFailure("Failed to create database directory at \(directory.path): \(error)")
+            }
         }
         
         let config = ModelConfiguration(schema: schema, url: url)
