@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import SwiftData
 import Combine
 
 /// Observable store for tree UI state management
@@ -15,7 +14,7 @@ final class TreeStore: ObservableObject {
     
     // MARK: - Published Properties
     
-    @Published private(set) var rootItems: [TierItem] = []
+    @Published private(set) var rootItems: [TierItemDTO] = []
     @Published private(set) var isLoading: Bool = false
     @Published private(set) var error: Error?
     
@@ -26,8 +25,8 @@ final class TreeStore: ObservableObject {
     
     // MARK: - Initialization
     
-    init(modelContext: ModelContext) {
-        self.repository = ItemRepository(modelContext: modelContext)
+    init(mcpClient: MCPToolClient) {
+        self.repository = ItemRepository(mcpClient: mcpClient)
     }
     
     // MARK: - Tree Loading
@@ -47,12 +46,15 @@ final class TreeStore: ObservableObject {
     }
     
     /// Refresh a specific node and its children
-    func refreshNode(_ item: TierItem) async {
+    func refreshNode(_ item: TierItemDTO) async {
         do {
-            if item.isRoot {
+            if item.parentId == nil {
                 rootItems = try await repository.fetchRoot()
-            } else if let parent = item.parent {
-                _ = try await repository.fetchChildren(of: parent)
+            } else if let parentId = item.parentId {
+                // Fetch parent to refresh its children
+                if let parent = try await repository.fetch(byId: parentId) {
+                    _ = try await repository.fetchChildren(of: parent)
+                }
             }
         } catch {
             self.error = error
@@ -62,22 +64,24 @@ final class TreeStore: ObservableObject {
     // MARK: - Node Operations
     
     /// Move a node to a new parent
-    func moveNode(_ item: TierItem, to newParent: TierItem?) async {
-        let oldParent = item.parent
+    func moveNode(_ item: TierItemDTO, to newParent: TierItemDTO?) async {
+        let oldParentId = item.parentId
         
         do {
             try await repository.move(item, to: newParent)
             
             // Incremental update: refresh both old and new parent subtrees
-            if let oldParent = oldParent {
-                await refreshNode(oldParent)
+            if let oldParentId = oldParentId {
+                if let oldParent = try await repository.fetch(byId: oldParentId) {
+                    await refreshNode(oldParent)
+                }
             } else {
                 rootItems = try await repository.fetchRoot()
             }
             
-            if let newParent = newParent, newParent.id != oldParent?.id {
+            if let newParent = newParent, newParent.id != oldParentId {
                 await refreshNode(newParent)
-            } else if newParent == nil && oldParent != nil {
+            } else if newParent == nil && oldParentId != nil {
                 rootItems = try await repository.fetchRoot()
             }
         } catch {
@@ -86,22 +90,24 @@ final class TreeStore: ObservableObject {
     }
     
     /// Move a node within the same parent (reorder)
-    func moveNode(_ item: TierItem, from sourceIndex: Int, to destinationIndex: Int) async {
-        guard let parent = item.parent else {
+    func moveNode(_ item: TierItemDTO, from sourceIndex: Int, to destinationIndex: Int) async {
+        guard let parentId = item.parentId else {
             await moveRootNode(item, from: sourceIndex, to: destinationIndex)
             return
         }
         
         do {
-            try await repository.reorderChildren(of: parent, from: sourceIndex, to: destinationIndex)
-            // Incremental update: only refresh parent's children
-            await refreshNode(parent)
+            if let parent = try await repository.fetch(byId: parentId) {
+                try await repository.reorderChildren(of: parent, from: sourceIndex, to: destinationIndex)
+                // Incremental update: only refresh parent's children
+                await refreshNode(parent)
+            }
         } catch {
             self.error = error
         }
     }
     
-    private func moveRootNode(_ item: TierItem, from sourceIndex: Int, to destinationIndex: Int) async {
+    private func moveRootNode(_ item: TierItemDTO, from sourceIndex: Int, to destinationIndex: Int) async {
         guard sourceIndex < rootItems.count, destinationIndex <= rootItems.count else { return }
         
         var items = rootItems
@@ -109,13 +115,12 @@ final class TreeStore: ObservableObject {
         let clampedDestination = min(destinationIndex, items.count)
         items.insert(movedItem, at: clampedDestination)
         
-        for (index, item) in items.enumerated() {
-            item.position = Double(index)
-            item.touch()
-        }
-        
+        // Update positions via repository
         do {
-            try await repository.update(items[destinationIndex])
+            for (index, var item) in items.enumerated() {
+                item.position = Double(index)
+                _ = try await repository.update(item)
+            }
             rootItems = items.sorted { $0.position < $1.position }
         } catch {
             self.error = error
@@ -125,12 +130,12 @@ final class TreeStore: ObservableObject {
     // MARK: - CRUD Operations
     
     /// Create a new item
-    func createItem(_ item: TierItem, parent: TierItem? = nil) async {
+    func createItem(_ item: TierItemDTO, parent: TierItemDTO? = nil) async {
         do {
             if let parent = parent {
-                try await repository.create(item, parent: parent)
+                _ = try await repository.create(item, parentId: parent.id)
             } else {
-                try await repository.create(item)
+                _ = try await repository.create(item)
             }
             // Incremental update: only refresh affected subtree
             if let parent = parent {
@@ -145,23 +150,25 @@ final class TreeStore: ObservableObject {
     }
     
     /// Update an existing item
-    func updateItem(_ item: TierItem) async {
+    func updateItem(_ item: TierItemDTO) async {
         do {
-            try await repository.update(item)
+            _ = try await repository.update(item)
             // No tree structure change - no refresh needed
-            // SwiftData will propagate changes via @Published
+            // Views will update via @Published
         } catch {
             self.error = error
         }
     }
     
     /// Delete an item (soft delete)
-    func deleteItem(_ item: TierItem) async {
+    func deleteItem(_ item: TierItemDTO) async {
         do {
             try await repository.delete(item)
             // Incremental update: refresh parent's children
-            if let parent = item.parent {
-                await refreshNode(parent)
+            if let parentId = item.parentId {
+                if let parent = try await repository.fetch(byId: parentId) {
+                    await refreshNode(parent)
+                }
             } else {
                 // Root item deleted - refresh root list
                 rootItems = try await repository.fetchRoot()
@@ -172,12 +179,14 @@ final class TreeStore: ObservableObject {
     }
     
     /// Restore a deleted item
-    func restoreItem(_ item: TierItem) async {
+    func restoreItem(_ item: TierItemDTO) async {
         do {
-            try await repository.restore(item)
+            _ = try await repository.restore(item)
             // Incremental update: refresh parent's children
-            if let parent = item.parent {
-                await refreshNode(parent)
+            if let parentId = item.parentId {
+                if let parent = try await repository.fetch(byId: parentId) {
+                    await refreshNode(parent)
+                }
             } else {
                 // Root item restored - refresh root list
                 rootItems = try await repository.fetchRoot()
@@ -190,7 +199,7 @@ final class TreeStore: ObservableObject {
     // MARK: - Query Operations
     
     /// Search for items
-    func search(query: String) async -> [TierItem] {
+    func search(query: String) async -> [TierItemDTO] {
         do {
             return try await repository.search(query: query)
         } catch {
@@ -200,7 +209,7 @@ final class TreeStore: ObservableObject {
     }
     
     /// Fetch children of an item
-    func fetchChildren(of item: TierItem) async -> [TierItem] {
+    func fetchChildren(of item: TierItemDTO) async -> [TierItemDTO] {
         do {
             return try await repository.fetchChildren(of: item)
         } catch {
@@ -211,11 +220,11 @@ final class TreeStore: ObservableObject {
     
     // MARK: - Selection State
     
-    @Published var selectedItem: TierItem?
+    @Published var selectedItem: TierItemDTO?
     @Published var expandedItems: Set<UUID> = []
     
     /// Toggle expansion state of an item
-    func toggleExpansion(_ item: TierItem) {
+    func toggleExpansion(_ item: TierItemDTO) {
         if expandedItems.contains(item.id) {
             expandedItems.remove(item.id)
         } else {
@@ -237,9 +246,9 @@ final class TreeStore: ObservableObject {
         expandedItems.removeAll()
     }
     
-    private func collectAllIds(_ item: TierItem, into set: inout Set<UUID>) {
+    private func collectAllIds(_ item: TierItemDTO, into set: inout Set<UUID>) {
         set.insert(item.id)
-        for child in item.outlineChildren {
+        for child in item.children {
             collectAllIds(child, into: &set)
         }
     }
