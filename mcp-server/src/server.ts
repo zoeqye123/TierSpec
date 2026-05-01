@@ -18,6 +18,7 @@ import {
   registerAgentTools,
   type AgentToolsOptions,
 } from './tools/agent.js';
+import { registerAITools } from './tools/ai.js';
 import { blockItemInputSchema, transitionStateInputSchema } from './schemas/workflow.js';
 import { processSprintItemsSchema, updateStorySchema, askClarificationSchema } from './schemas/agent.js';
 
@@ -44,6 +45,9 @@ export const ALL_TOOL_NAMES = [
   'process_sprint_items',
   'ask_clarification',
   'update_story',
+  'parse_requirement',
+  'estimate_complexity',
+  'detect_dependencies',
 ] as const;
 
 const workflowToolDefinitions = {
@@ -164,6 +168,10 @@ export function registerAllTools(server: McpServer, database: Database, actorUse
     database,
     actorUserId,
   } satisfies AgentToolsOptions);
+  registerAITools(server as Parameters<typeof registerAITools>[0], {
+    database,
+    defaultApiKey: process.env.OPENAI_API_KEY,
+  });
 
   return ALL_TOOL_NAMES;
 }
