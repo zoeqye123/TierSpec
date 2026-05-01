@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import SwiftData
 import UniformTypeIdentifiers
 #if canImport(AppKit)
 import AppKit
@@ -15,10 +14,12 @@ import AppKit
 @main
 struct TierSpecApp: App {
     private static let projectWindowSceneID = "project-window"
-
+    
+    @StateObject private var mcpClientManager = MCPClientManager()
+    
     var body: some Scene {
         WindowGroup(id: Self.projectWindowSceneID) {
-            ProjectWindowSceneView()
+            ProjectWindowSceneView(mcpClientManager: mcpClientManager)
         }
         .commands {
             ProjectWindowCommands(sceneID: Self.projectWindowSceneID)
@@ -76,19 +77,32 @@ private extension FocusedValues {
 }
 
 private struct ProjectWindowSceneView: View {
+    @ObservedObject var mcpClientManager: MCPClientManager
     @State private var projectManager = ProjectManager()
-
+    @State private var mcpToolClient: MCPToolClient?
+    
     var body: some View {
         Group {
-            if let project = projectManager.currentProject {
-                ContentView(projectName: project.name)
-                    .modelContainer(project.modelContainer)
-                    .navigationTitle(project.name)
+            if mcpClientManager.isConnected {
+                if let project = projectManager.currentProject, let mcpToolClient = mcpToolClient {
+                    ContentView(projectName: project.name, mcpToolClient: mcpToolClient)
+                        .navigationTitle(project.name)
+                } else {
+                    WelcomeView(projectManager: projectManager)
+                }
             } else {
-                WelcomeView(projectManager: projectManager)
+                ConnectionView(mcpClientManager: mcpClientManager)
             }
         }
         .focusedSceneValue(\.projectManager, projectManager)
+        .task {
+            do {
+                try await mcpClientManager.connect()
+                mcpToolClient = MCPToolClient(clientManager: mcpClientManager)
+            } catch {
+                print("[TierSpecApp] Failed to connect to MCP server: \(error)")
+            }
+        }
     }
 }
 
@@ -143,32 +157,6 @@ class ProjectManager {
         )
         openProjects[id] = project
         currentProject = project
-        
-        // Auto-create Sprint 1 (2 weeks from today, status: planning)
-        createDefaultSprint(in: project.modelContainer)
-    }
-    
-    private func createDefaultSprint(in container: ModelContainer) {
-        let context = container.mainContext
-        let today = Date()
-        let calendar = Calendar.current
-        guard let endDate = calendar.date(byAdding: .day, value: 14, to: today) else {
-            assertionFailure("Failed to calculate sprint end date")
-            return
-        }
-        
-        let sprint = Sprint(
-            name: "Sprint 1",
-            startDate: today,
-            endDate: endDate,
-            status: .planning
-        )
-        context.insert(sprint)
-        do {
-            try context.save()
-        } catch {
-            assertionFailure("Failed to save default sprint: \(error)")
-        }
     }
     
     func openProject() {
@@ -211,33 +199,6 @@ struct ProjectContext: Identifiable {
     let id: UUID
     let name: String
     let databasePath: String
-    let modelContainer: ModelContainer
-    
-    init(id: UUID, name: String, databasePath: String) {
-        self.id = id
-        self.name = name
-        self.databasePath = databasePath
-        
-        let schema = Schema([TierItem.self, Sprint.self])
-        let url = URL(fileURLWithPath: databasePath)
-        let directory = url.deletingLastPathComponent()
-        
-        if !FileManager.default.fileExists(atPath: directory.path) {
-            do {
-                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            } catch {
-                assertionFailure("Failed to create database directory at \(directory.path): \(error)")
-            }
-        }
-        
-        let config = ModelConfiguration(schema: schema, url: url)
-        
-        do {
-            self.modelContainer = try ModelContainer(for: schema, configurations: [config])
-        } catch {
-            fatalError("Failed to create ModelContainer: \(error)")
-        }
-    }
 }
 
 struct WelcomeView: View {
@@ -297,5 +258,44 @@ struct WelcomeView: View {
         } message: {
             Text("Enter a name for your new project.")
         }
+    }
+}
+
+struct ConnectionView: View {
+    @ObservedObject var mcpClientManager: MCPClientManager
+    
+    var body: some View {
+        VStack(spacing: 24) {
+            if let error = mcpClientManager.connectionError {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 64))
+                    .foregroundStyle(.red)
+                
+                Text("Connection Failed")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                
+                Text(error)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                
+                Button("Retry") {
+                    Task {
+                        try? await mcpClientManager.connect()
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+            } else {
+                ProgressView()
+                    .scaleEffect(1.5)
+                
+                Text("Connecting to MCP Server...")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(minWidth: 400, minHeight: 300)
     }
 }

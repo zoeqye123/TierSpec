@@ -6,27 +6,26 @@
 //
 
 import SwiftUI
-import SwiftData
 
 struct ContentView: View {
     var projectName: String
-    @Environment(\.modelContext) private var modelContext
+    let mcpToolClient: MCPToolClient
     
     var body: some View {
-        ContentViewWithStore(modelContext: modelContext, projectName: projectName)
+        ContentViewWithStore(mcpToolClient: mcpToolClient, projectName: projectName)
     }
 }
 
 private struct ContentViewWithStore: View {
     @StateObject private var treeStore: TreeStore
-    @State private var selectedSprint: Sprint?
+    @State private var selectedSprint: SprintDTO?
     @State private var searchText: String = ""
     @State private var sidebarTab: SidebarTab = .hierarchy
     @State private var showingCreateSprint = false
     let projectName: String
     
-    init(modelContext: ModelContext, projectName: String) {
-        _treeStore = StateObject(wrappedValue: TreeStore(modelContext: modelContext))
+    init(mcpToolClient: MCPToolClient, projectName: String) {
+        _treeStore = StateObject(wrappedValue: TreeStore(mcpClient: mcpToolClient))
         self.projectName = projectName
     }
     
@@ -49,11 +48,12 @@ private struct ContentViewWithStore: View {
                             selectedItem: selectedItemBinding,
                             onAddChild: addChild,
                             onDelete: deleteItem,
-                            onUpdateTitle: updateTitle
+                            onUpdateTitle: updateTitle,
+                            treeStore: treeStore
                         )
                     }
                 case .sprints:
-                    KanbanView()
+                    KanbanView(treeStore: treeStore)
                 }
             }
             .frame(minWidth: 250)
@@ -74,7 +74,7 @@ private struct ContentViewWithStore: View {
             }
         } detail: {
             if let selectedItem = treeStore.selectedItem {
-                ItemDetailView(item: selectedItem)
+                ItemDetailView(item: selectedItem, treeStore: treeStore)
             } else {
                 ContentUnavailableView(
                     "Select an Item",
@@ -85,7 +85,7 @@ private struct ContentViewWithStore: View {
         }
         .navigationSplitViewStyle(.balanced)
         .sheet(isPresented: $showingCreateSprint) {
-            SprintFormView()
+            SprintFormView(treeStore: treeStore)
         }
         .task {
             await treeStore.loadTree()
@@ -104,7 +104,7 @@ private struct ContentViewWithStore: View {
         .padding(.vertical, 8)
     }
 
-    private var selectedItemBinding: Binding<TierItem?> {
+    private var selectedItemBinding: Binding<TierItemDTO?> {
         Binding(
             get: { treeStore.selectedItem },
             set: { treeStore.selectedItem = $0 }
@@ -138,12 +138,26 @@ private struct ContentViewWithStore: View {
     
     private func addCapability() {
         let nextPosition = Double(Date().timeIntervalSince1970)
-        let capability = TierItem(
+        let capability = TierItemDTO(
+            id: UUID(),
             type: .capability,
+            parentId: nil,
+            sprintId: nil,
             title: "New Capability",
             description: "Describe the business or technical capability.",
-            status: .todo,
-            position: nextPosition
+            status: .backlog,
+            priority: 0,
+            position: nextPosition,
+            storyPoints: nil,
+            complexity: nil,
+            aiGenerated: false,
+            aiConfidence: nil,
+            aiReasoning: nil,
+            labels: [],
+            createdAt: Date(),
+            updatedAt: Date(),
+            deletedAt: nil,
+            children: []
         )
         
         Task {
@@ -158,14 +172,28 @@ private struct ContentViewWithStore: View {
         showingCreateSprint = true
     }
     
-    private func addChild(to parent: TierItem, type: ItemType) {
-        let nextPosition = Double(parent.children?.count ?? 0)
-        let child = TierItem(
+    private func addChild(to parent: TierItemDTO, type: ItemTypeDTO) {
+        let nextPosition = Double(parent.children.count)
+        let child = TierItemDTO(
+            id: UUID(),
             type: type,
+            parentId: parent.id,
+            sprintId: nil,
             title: "New \(type.displayName)",
             description: nil,
-            status: .todo,
-            position: nextPosition
+            status: .backlog,
+            priority: 0,
+            position: nextPosition,
+            storyPoints: nil,
+            complexity: nil,
+            aiGenerated: false,
+            aiConfidence: nil,
+            aiReasoning: nil,
+            labels: [],
+            createdAt: Date(),
+            updatedAt: Date(),
+            deletedAt: nil,
+            children: []
         )
         
         Task {
@@ -176,7 +204,7 @@ private struct ContentViewWithStore: View {
         }
     }
     
-    private func deleteItem(_ item: TierItem) {
+    private func deleteItem(_ item: TierItemDTO) {
         Task {
             await treeStore.deleteItem(item)
             withAnimation {
@@ -187,15 +215,16 @@ private struct ContentViewWithStore: View {
         }
     }
     
-    private func updateTitle(_ item: TierItem, _ newTitle: String) {
-        item.title = newTitle
+    private func updateTitle(_ item: TierItemDTO, _ newTitle: String) {
+        var updatedItem = item
+        updatedItem.title = newTitle
+        updatedItem.updatedAt = Date()
         Task {
-            await treeStore.updateItem(item)
+            await treeStore.updateItem(updatedItem)
         }
     }
 }
 
 #Preview {
-    ContentView(projectName: "My Project")
-        .modelContainer(for: TierItem.self, inMemory: true)
+    ContentView(projectName: "My Project", mcpToolClient: MCPToolClient(clientManager: MCPClientManager()))
 }
