@@ -6,41 +6,84 @@
 //
 
 import SwiftUI
-import SwiftData
 #if canImport(AppKit)
 import AppKit
 #endif
 
-struct KanbanView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query(filter: #Predicate<TierItem> { $0.deletedAt == nil }, sort: \TierItem.priority, order: .reverse) 
-    private var allItems: [TierItem]
-    @Query(sort: \Sprint.startDate) 
-    private var sprints: [Sprint]
+enum KanbanColumn: String, CaseIterable {
+    case todo = "To Do"
+    case inProgress = "In Progress"
+    case test = "Test"
+    case done = "Done"
     
-    @State private var selectedItem: TierItem?
-    @State private var selectedSprint: Sprint?
-    @State private var validationError: StateMachineError?
-    @State private var showErrorAlert = false
-    @State private var showingCreateSprint = false
-    @State private var showingAISuggestions = false
-    @State private var aiSuggestions: [SprintAssignmentSuggestion] = []
+    var displayName: String {
+        return self.rawValue
+    }
     
-    private var userStories: [TierItem] {
-        if let sprint = selectedSprint {
-            return allItems.filter { 
-                $0.type == .user_story && $0.sprint?.id == sprint.id 
-            }
-        } else {
-            return allItems.filter { 
-                $0.type == .user_story && $0.sprint == nil 
-            }
+    var color: Color {
+        switch self {
+        case .todo: return .secondary
+        case .inProgress: return .blue
+        case .test: return .indigo
+        case .done: return .green
         }
     }
     
-    private let columns: [ItemStatus] = [
+    func contains(status: ItemStatusDTO) -> Bool {
+        switch self {
+        case .todo:
+            return [.requirementInput, .requirementReview, .needsInfo, .backlog].contains(status)
+        case .inProgress:
+            return [.inProgress, .aiDecomposing].contains(status)
+        case .test:
+            return [.waitingForTest, .testing, .acceptance].contains(status)
+        case .done:
+            return [.completed, .published].contains(status)
+        }
+    }
+    
+    func toItemStatus() -> ItemStatusDTO {
+        switch self {
+        case .todo: return .backlog
+        case .inProgress: return .inProgress
+        case .test: return .testing
+        case .done: return .completed
+        }
+    }
+}
+
+struct KanbanView: View {
+    @ObservedObject var treeStore: TreeStore
+    @StateObject private var sprintStore: SprintStore
+    
+    @State private var selectedItem: TierItemDTO?
+    @State private var selectedSprint: SprintDTO?
+    @State private var validationError: StateMachineDTOError?
+    @State private var showErrorAlert = false
+    @State private var showingCreateSprint = false
+    
+    init(treeStore: TreeStore) {
+        self._treeStore = ObservedObject(wrappedValue: treeStore)
+        _sprintStore = StateObject(wrappedValue: SprintStore(mcpClient: treeStore.repository.mcpClient))
+    }
+    
+    private var allItems: [TierItemDTO] {
+        treeStore.rootItems.flatMap { flattenItems($0) }
+    }
+    
+    private var userStories: [TierItemDTO] {
+        let stories = allItems.filter { $0.type == .userStory && $0.deletedAt == nil }
+        
+        if let sprint = selectedSprint {
+            return stories.filter { $0.sprintId == sprint.id }
+        } else {
+            return stories.filter { $0.sprintId == nil }
+        }
+    }
+    
+    private let columns: [KanbanColumn] = [
         .todo,
-        .in_progress,
+        .inProgress,
         .test,
         .done,
     ]
@@ -52,20 +95,15 @@ struct KanbanView: View {
             kanbanBoard
         }
         .navigationTitle("Kanban Board")
-        .onAppear {
+        .task {
+            await sprintStore.loadSprints()
             selectDefaultSprint()
         }
         .sheet(isPresented: $showingCreateSprint) {
-            SprintFormView()
-        }
-        .sheet(isPresented: $showingAISuggestions) {
-            AISuggestionsView(
-                suggestions: $aiSuggestions,
-                onApply: applySuggestion
-            )
+            SprintFormView(sprintStore: sprintStore)
         }
         .sheet(item: $selectedItem) { item in
-            ItemDetailView(item: item)
+            ItemDetailView(item: item, treeStore: treeStore)
         }
         .alert("Invalid Status Transition", isPresented: $showErrorAlert) {
             Button("OK", role: .cancel) { }
@@ -78,10 +116,10 @@ struct KanbanView: View {
     private var sprintPicker: some View {
         HStack {
             Picker("Sprint", selection: $selectedSprint) {
-                Text("Unassigned Stories").tag(nil as Sprint?)
-                ForEach(sprints) { sprint in
+                Text("Unassigned Stories").tag(nil as SprintDTO?)
+                ForEach(sprintStore.sprints) { sprint in
                     Text("\(sprint.name) (\(sprint.status.displayName))")
-                        .tag(sprint as Sprint?)
+                        .tag(sprint as SprintDTO?)
                 }
             }
             .pickerStyle(.menu)
@@ -93,15 +131,6 @@ struct KanbanView: View {
                 Label("New Sprint", systemImage: "plus")
             }
             .buttonStyle(.bordered)
-            
-            Button {
-                generateAISuggestions()
-                showingAISuggestions = true
-            } label: {
-                Label("AI Assign", systemImage: "sparkles")
-            }
-            .buttonStyle(.bordered)
-            .disabled(unassignedStories.isEmpty)
             
             Spacer()
             
@@ -125,10 +154,10 @@ struct KanbanView: View {
     private var kanbanBoard: some View {
         ScrollView(.horizontal) {
             HStack(alignment: .top, spacing: 16) {
-                ForEach(columns, id: \.self) { status in
-                    KanbanColumn(
-                        status: status,
-                        items: userStories.filter { $0.status == status },
+                ForEach(columns, id: \.self) { column in
+                    KanbanColumnView(
+                        column: column,
+                        items: userStories.filter { column.contains(status: $0.status) },
                         selectedItem: $selectedItem,
                         resolveItemByID: resolveDraggedItem,
                         onStatusChange: changeStatus
@@ -139,12 +168,14 @@ struct KanbanView: View {
         }
     }
     
-    private func changeStatus(_ item: TierItem, to newStatus: ItemStatus) {
+    private func changeStatus(_ item: TierItemDTO, to column: KanbanColumn) {
+        let newStatus = column.toItemStatus()
+        
         guard item.status != newStatus else { return }
         
-        do {
-            try StateMachine.assertValidTransition(from: item.status, to: newStatus, actorType: .human)
-        } catch let error as StateMachineError {
+do {
+            try StateMachineDTO.assertValidTransition(from: item.status, to: newDTOStatus, actorType: .human)
+        } catch let error as StateMachineDTOError {
             validationError = error
             showErrorAlert = true
             return
@@ -154,53 +185,44 @@ struct KanbanView: View {
             return
         }
 
-        withAnimation {
-            item.status = newStatus
-            item.touch()
-            
-            if let sprint = item.sprint {
-                recalculateSprintPoints(sprint)
-            }
-
-            do {
-                try modelContext.save()
-            } catch {
-                assertionFailure("Failed to save drag-drop status change: \(error)")
-            }
+        Task {
+            var updatedItem = item
+            updatedItem.status = newStatus
+            updatedItem.updatedAt = Date()
+            await treeStore.updateItem(updatedItem)
         }
     }
-
-    private func resolveDraggedItem(id: String) -> TierItem? {
-        userStories.first { $0.id.uuidString == id }
-    }
     
-    private func recalculateSprintPoints(_ sprint: Sprint) {
-        let sprintItems = allItems.filter { $0.sprint?.id == sprint.id }
-        sprint.committedPoints = sprintItems.compactMap { $0.storyPoints }.reduce(0, +)
-        sprint.completedPoints = sprintItems.filter { $0.status == .done }.compactMap { $0.storyPoints }.reduce(0, +)
-        sprint.touch()
+    private func resolveDraggedItem(id: String) -> TierItemDTO? {
+        userStories.first { $0.id.uuidString == id }
     }
     
     private func selectDefaultSprint() {
         guard selectedSprint == nil else { return }
         
-        // First, try to find an active sprint
-        if let activeSprint = sprints.first(where: { $0.status == .active }) {
+        if let activeSprint = sprintStore.sprints.first(where: { $0.status == .active }) {
             selectedSprint = activeSprint
-        } else if let firstSprint = sprints.first {
-            // Fall back to the first sprint
+        } else if let firstSprint = sprintStore.sprints.first {
             selectedSprint = firstSprint
         }
     }
+    
+    private func flattenItems(_ item: TierItemDTO) -> [TierItemDTO] {
+        var result = [item]
+        for child in item.children {
+            result.append(contentsOf: flattenItems(child))
+        }
+        return result
+    }
 }
 
-struct KanbanColumn: View {
-    let status: ItemStatus
-    let items: [TierItem]
-    @Binding var selectedItem: TierItem?
-    let resolveItemByID: (String) -> TierItem?
-    let onStatusChange: (TierItem, ItemStatus) -> Void
-
+struct KanbanColumnView: View {
+    let column: KanbanColumn
+    let items: [TierItemDTO]
+    @Binding var selectedItem: TierItemDTO?
+    let resolveItemByID: (String) -> TierItemDTO?
+    let onStatusChange: (TierItemDTO, KanbanColumn) -> Void
+    
     @State private var isDropTargeted = false
     
     var body: some View {
@@ -217,7 +239,7 @@ struct KanbanColumn: View {
                             }
                             .draggable(item.id.uuidString)
                     }
-
+                    
                     if items.isEmpty {
                         RoundedRectangle(cornerRadius: 8)
                             .fill(Color.clear)
@@ -239,15 +261,15 @@ struct KanbanColumn: View {
         )
         .dropDestination(for: String.self) { droppedIDs, _ in
             var handledDrop = false
-
+            
             for droppedID in droppedIDs {
                 guard let item = resolveItemByID(droppedID) else { continue }
-                guard item.status != status else { continue }
-
-                onStatusChange(item, status)
+                guard !column.contains(status: item.status) else { continue }
+                
+                onStatusChange(item, column)
                 handledDrop = true
             }
-
+            
             return handledDrop
         } isTargeted: { targeted in
             withAnimation(.easeInOut(duration: 0.12)) {
@@ -255,15 +277,15 @@ struct KanbanColumn: View {
             }
         }
     }
-
+    
     @ViewBuilder
     private var header: some View {
         HStack {
             Circle()
-                .fill(status.color)
+                .fill(column.color)
                 .frame(width: 12, height: 12)
             
-            Text(status.displayName)
+            Text(column.displayName)
                 .font(.headline)
             
             Spacer()
@@ -282,7 +304,7 @@ struct KanbanColumn: View {
 }
 
 struct KanbanCard: View {
-    let item: TierItem
+    let item: TierItemDTO
     
     private var cardBackgroundColor: Color {
         #if canImport(AppKit)
@@ -355,9 +377,4 @@ struct KanbanCard: View {
                 .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
         )
     }
-}
-
-#Preview {
-    KanbanView()
-        .modelContainer(for: [TierItem.self, Sprint.self], inMemory: true)
 }

@@ -6,16 +6,27 @@
 //
 
 import SwiftUI
-import SwiftData
 
 struct SprintListView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Sprint.startDate) private var sprints: [Sprint]
+    let sprintStore: SprintStore?
+    let treeStore: TreeStore?
+    
+    @State private var sprints: [SprintDTO] = []
     @State private var showingCreateSprint = false
-    @State private var editingSprint: Sprint?
-    @State private var selectedSprint: Sprint?
-    @State private var sprintPendingDelete: Sprint?
+    @State private var editingSprint: SprintDTO?
+    @State private var selectedSprint: SprintDTO?
+    @State private var sprintPendingDelete: SprintDTO?
     @State private var showingDeleteConfirmation = false
+    
+    init(sprintStore: SprintStore) {
+        self.sprintStore = sprintStore
+        self.treeStore = nil
+    }
+    
+    init(treeStore: TreeStore) {
+        self.sprintStore = nil
+        self.treeStore = treeStore
+    }
     
     var body: some View {
         NavigationStack {
@@ -58,10 +69,18 @@ struct SprintListView: View {
                 }
             }
             .sheet(isPresented: $showingCreateSprint) {
-                SprintFormView()
+                if let sprintStore {
+                    SprintFormView(sprintStore: sprintStore)
+                } else if let treeStore {
+                    SprintFormView(treeStore: treeStore)
+                }
             }
             .sheet(item: $editingSprint) { sprint in
-                SprintFormView(sprint: sprint)
+                if let sprintStore {
+                    SprintFormView(sprintStore: sprintStore, sprint: sprint)
+                } else if let treeStore {
+                    SprintFormView(treeStore: treeStore, sprint: sprint)
+                }
             }
             .sheet(item: $selectedSprint) { sprint in
                 SprintDetailView(sprint: sprint)
@@ -79,6 +98,11 @@ struct SprintListView: View {
                 }
             } message: { sprint in
                 Text("\(sprint.name) and its sprint assignment links will be removed.")
+            }
+            .onAppear {
+                Task {
+                    await loadSprints()
+                }
             }
         }
     }
@@ -103,13 +127,18 @@ struct SprintListView: View {
         .padding(.vertical, 40)
     }
     
+    private func loadSprints() async {
+        // TODO: Implement sprint loading via MCP
+        sprints = []
+    }
+    
     private func deleteSprints(at offsets: IndexSet) {
         for index in offsets {
             deleteSprint(sprints[index])
         }
     }
 
-    private func deleteSprint(_ sprint: Sprint) {
+    private func deleteSprint(_ sprint: SprintDTO) {
         if selectedSprint?.id == sprint.id {
             selectedSprint = nil
         }
@@ -117,15 +146,16 @@ struct SprintListView: View {
             editingSprint = nil
         }
         sprintPendingDelete = nil
-        modelContext.delete(sprint)
+        sprints.removeAll { $0.id == sprint.id }
+        // TODO: Implement sprint deletion via MCP
     }
 }
 
 struct SprintRowView: View {
-    let sprint: Sprint
+    let sprint: SprintDTO
 
-    private var storyItems: [TierItem] {
-        (sprint.items ?? []).filter { $0.deletedAt == nil && $0.type == .user_story }
+    private var storyItems: [TierItemDTO] {
+        sprint.items.filter { $0.deletedAt == nil && $0.type == .userStory }
     }
 
     private var totalStoryCount: Int {
@@ -133,7 +163,7 @@ struct SprintRowView: View {
     }
 
     private var completedStoryCount: Int {
-        storyItems.filter { $0.status == .done }.count
+        storyItems.filter { $0.status == .completed }.count
     }
 
     private var storyProgress: Double {
@@ -205,24 +235,42 @@ struct SprintRowView: View {
 }
 
 struct SprintFormView: View {
-    @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
-    private let sprint: Sprint?
+    private let sprint: SprintDTO?
+    private let sprintStore: SprintStore?
+    private let treeStore: TreeStore?
 
     @State private var name = ""
     @State private var startDate = Date()
     @State private var endDate = Date().addingTimeInterval(14 * 24 * 60 * 60)
     @State private var capacityPoints = 40
-    @State private var status: SprintStatus = .planning
+    @State private var status: SprintStatusDTO = .planning
 
-    init(sprint: Sprint? = nil) {
+    init(sprintStore: SprintStore, sprint: SprintDTO? = nil) {
+        self.sprintStore = sprintStore
+        self.treeStore = nil
         self.sprint = sprint
-        _name = State(initialValue: sprint?.name ?? "")
-        _startDate = State(initialValue: sprint?.startDate ?? Date())
-        _endDate = State(initialValue: sprint?.endDate ?? Date().addingTimeInterval(14 * 24 * 60 * 60))
-        _capacityPoints = State(initialValue: sprint?.capacityPoints ?? 40)
-        _status = State(initialValue: sprint?.status ?? .planning)
+        if let sprint {
+            _name = State(initialValue: sprint.name)
+            _startDate = State(initialValue: sprint.startDate)
+            _endDate = State(initialValue: sprint.endDate)
+            _capacityPoints = State(initialValue: sprint.capacityPoints)
+            _status = State(initialValue: sprint.status)
+        }
+    }
+    
+    init(treeStore: TreeStore, sprint: SprintDTO? = nil) {
+        self.sprintStore = nil
+        self.treeStore = treeStore
+        self.sprint = sprint
+        if let sprint {
+            _name = State(initialValue: sprint.name)
+            _startDate = State(initialValue: sprint.startDate)
+            _endDate = State(initialValue: sprint.endDate)
+            _capacityPoints = State(initialValue: sprint.capacityPoints)
+            _status = State(initialValue: sprint.status)
+        }
     }
 
     private var isFormValid: Bool {
@@ -245,7 +293,7 @@ struct SprintFormView: View {
 
                 Section("Status") {
                     Picker("Sprint Status", selection: $status) {
-                        ForEach(SprintStatus.allCases, id: \.self) { sprintStatus in
+                        ForEach(SprintStatusDTO.allCases, id: \.self) { sprintStatus in
                             Text(sprintStatus.displayName).tag(sprintStatus)
                         }
                     }
@@ -269,22 +317,16 @@ struct SprintFormView: View {
     private func saveSprint() {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if let sprint {
-            sprint.name = trimmedName
-            sprint.startDate = startDate
-            sprint.endDate = endDate
-            sprint.capacityPoints = capacityPoints
-            sprint.status = status
-            sprint.touch()
-        } else {
-            let newSprint = Sprint(
-                name: trimmedName,
-                startDate: startDate,
-                endDate: endDate,
-                capacityPoints: capacityPoints,
-                status: status
-            )
-            modelContext.insert(newSprint)
+        Task {
+            if let sprintStore {
+                if let sprint {
+                    // TODO: Update sprint via sprintStore
+                } else {
+                    // TODO: Create sprint via sprintStore
+                }
+            } else if let treeStore {
+                // TODO: Create/update sprint via treeStore's MCP client
+            }
         }
 
         dismiss()
@@ -292,18 +334,17 @@ struct SprintFormView: View {
 }
 
 struct SprintDetailView: View {
-    @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Bindable var sprint: Sprint
+    @Bindable var sprint: SprintDTO
     
-    @Query(sort: \TierItem.position) private var allItems: [TierItem]
+    @State private var allItems: [TierItemDTO] = []
     
-    var sprintItems: [TierItem] {
-        allItems.filter { $0.sprint?.id == sprint.id && $0.deletedAt == nil }
+    var sprintItems: [TierItemDTO] {
+        allItems.filter { $0.sprintId == sprint.id && $0.deletedAt == nil }
     }
     
-    var availableItems: [TierItem] {
-        allItems.filter { $0.sprint == nil && $0.deletedAt == nil && $0.type == .user_story }
+    var availableItems: [TierItemDTO] {
+        allItems.filter { $0.sprintId == nil && $0.deletedAt == nil && $0.type == .userStory }
     }
     
     var body: some View {
@@ -314,7 +355,7 @@ struct SprintDetailView: View {
                         Text("Status")
                         Spacer()
                         Picker("", selection: $sprint.status) {
-                            ForEach(SprintStatus.allCases, id: \.self) { status in
+                            ForEach(SprintStatusDTO.allCases, id: \.self) { status in
                                 Text(status.displayName).tag(status)
                             }
                         }
@@ -363,8 +404,7 @@ struct SprintDetailView: View {
                             }
                             .swipeActions {
                                 Button {
-                                    item.sprint = nil
-                                    recalculatePoints()
+                                    removeItemFromSprint(item)
                                 } label: {
                                     Label("Remove", systemImage: "xmark")
                                 }
@@ -398,8 +438,7 @@ struct SprintDetailView: View {
                                 }
                                 .swipeActions {
                                     Button {
-                                        item.sprint = sprint
-                                        recalculatePoints()
+                                        assignItemToSprint(item)
                                     } label: {
                                         Label("Assign", systemImage: "plus")
                                     }
@@ -416,18 +455,34 @@ struct SprintDetailView: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .onAppear {
+                Task {
+                    await loadItems()
+                }
+            }
         }
     }
     
+    private func loadItems() async {
+        // TODO: Load items via MCP
+        allItems = []
+    }
+    
+    private func removeItemFromSprint(_ item: TierItemDTO) {
+        // TODO: Update item via MCP to remove sprint assignment
+        recalculatePoints()
+    }
+    
+    private func assignItemToSprint(_ item: TierItemDTO) {
+        // TODO: Update item via MCP to assign to sprint
+        recalculatePoints()
+    }
+    
     private func recalculatePoints() {
-        let items = sprintItems
-        sprint.committedPoints = items.compactMap { $0.storyPoints }.reduce(0, +)
-        sprint.completedPoints = items.filter { $0.status == .done }.compactMap { $0.storyPoints }.reduce(0, +)
-        sprint.touch()
+        // TODO: Recalculate sprint points via MCP
     }
 }
 
 #Preview {
-    SprintListView()
-        .modelContainer(for: Sprint.self, inMemory: true)
+    SprintListView(sprintStore: SprintStore(mcpClient: MockMCPToolClient()))
 }

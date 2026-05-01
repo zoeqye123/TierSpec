@@ -6,77 +6,80 @@
 //
 
 import SwiftUI
-import SwiftData
 
-// MARK: - Preview Helpers
-
-extension TierItem {
+extension TierItemDTO {
     static func makePreviewItem(
-        type: ItemType,
+        type: ItemTypeDTO,
         title: String,
-        status: ItemStatus = .in_progress,
+        status: ItemStatusDTO = .inProgress,
         priority: Int = 50,
         storyPoints: Int? = nil,
-        complexity: Complexity? = nil,
+        complexity: ComplexityDTO? = nil,
         aiGenerated: Bool = false
-    ) -> TierItem {
-        TierItem(
+    ) -> TierItemDTO {
+        TierItemDTO(
+            id: UUID(),
             type: type,
+            parentId: nil,
+            sprintId: nil,
             title: title,
             description: "This is a sample \(type.displayName.lowercased()) with a detailed description that explains what this item is about and what it should accomplish.",
             status: status,
             priority: priority,
+            position: 0,
             storyPoints: storyPoints,
             complexity: complexity,
             aiGenerated: aiGenerated,
-            labels: ["frontend", "enhancement"]
+            aiConfidence: nil,
+            aiReasoning: nil,
+            labels: ["frontend", "enhancement"],
+            createdAt: Date(),
+            updatedAt: Date(),
+            deletedAt: nil,
+            children: []
         )
     }
 }
 
-// MARK: - Previews
-
 struct ItemDetailViewCapabilityPreview: PreviewProvider {
     static var previews: some View {
-        let item = TierItem.makePreviewItem(
+        let item = TierItemDTO.makePreviewItem(
             type: .capability,
             title: "User Authentication System",
-            status: .in_progress,
+            status: .inProgress,
             priority: 80,
             complexity: .l
         )
         
         NavigationStack {
-            ItemDetailView(item: item)
+            ItemDetailView(item: item, treeStore: TreeStore(mcpClient: MockMCPToolClient()))
         }
-        .modelContainer(for: TierItem.self, inMemory: true)
     }
 }
 
 struct ItemDetailViewFeaturePreview: PreviewProvider {
     static var previews: some View {
-        let item = TierItem.makePreviewItem(
+        let item = TierItemDTO.makePreviewItem(
             type: .feature,
             title: "OAuth 2.0 Integration",
-            status: .todo,
+            status: .backlog,
             priority: 70,
             storyPoints: 8,
             complexity: .l
         )
         
         NavigationStack {
-            ItemDetailView(item: item)
+            ItemDetailView(item: item, treeStore: TreeStore(mcpClient: MockMCPToolClient()))
         }
-        .modelContainer(for: TierItem.self, inMemory: true)
     }
 }
 
 struct ItemDetailViewUserStoryPreview: PreviewProvider {
     static var previews: some View {
-        let item = TierItem.makePreviewItem(
-            type: .user_story,
+        let item = TierItemDTO.makePreviewItem(
+            type: .userStory,
             title: "Google Sign-In for Users",
-            status: .test,
+            status: .testing,
             priority: 85,
             storyPoints: 5,
             complexity: .m,
@@ -84,36 +87,34 @@ struct ItemDetailViewUserStoryPreview: PreviewProvider {
         )
         
         NavigationStack {
-            ItemDetailView(item: item)
+            ItemDetailView(item: item, treeStore: TreeStore(mcpClient: MockMCPToolClient()))
         }
-        .modelContainer(for: TierItem.self, inMemory: true)
     }
 }
 
 struct ItemDetailViewTestCasePreview: PreviewProvider {
     static var previews: some View {
-        let item = TierItem.makePreviewItem(
-            type: .test_case,
+        let item = TierItemDTO.makePreviewItem(
+            type: .testCase,
             title: "Verify Token Expiry Handling",
-            status: .done,
+            status: .completed,
             priority: 50,
             storyPoints: 1,
             complexity: .xs
         )
         
         NavigationStack {
-            ItemDetailView(item: item)
+            ItemDetailView(item: item, treeStore: TreeStore(mcpClient: MockMCPToolClient()))
         }
-        .modelContainer(for: TierItem.self, inMemory: true)
     }
 }
 
 struct ItemDetailViewAIGeneratedPreview: PreviewProvider {
     static var previews: some View {
-        let item = TierItem.makePreviewItem(
-            type: .user_story,
+        let item = TierItemDTO.makePreviewItem(
+            type: .userStory,
             title: "AI-Powered Recommendations",
-            status: .todo,
+            status: .backlog,
             priority: 75,
             storyPoints: 21,
             complexity: .xl,
@@ -121,15 +122,14 @@ struct ItemDetailViewAIGeneratedPreview: PreviewProvider {
         )
         
         NavigationStack {
-            ItemDetailView(item: item)
+            ItemDetailView(item: item, treeStore: TreeStore(mcpClient: MockMCPToolClient()))
         }
-        .modelContainer(for: TierItem.self, inMemory: true)
     }
 }
 
 struct ItemDetailViewBlockedPreview: PreviewProvider {
     static var previews: some View {
-        let item = TierItem.makePreviewItem(
+        let item = TierItemDTO.makePreviewItem(
             type: .feature,
             title: "Payment Gateway Integration",
             status: .blocked,
@@ -139,25 +139,23 @@ struct ItemDetailViewBlockedPreview: PreviewProvider {
         )
         
         NavigationStack {
-            ItemDetailView(item: item)
+            ItemDetailView(item: item, treeStore: TreeStore(mcpClient: MockMCPToolClient()))
         }
-        .modelContainer(for: TierItem.self, inMemory: true)
     }
 }
 
 struct ItemDetailViewStatusGalleryPreview: PreviewProvider {
     static var previews: some View {
         StatusGalleryView()
-            .modelContainer(for: TierItem.self, inMemory: true)
     }
 }
 
 struct StatusGalleryView: View {
-    let statuses: [(ItemStatus, String)] = [
-        (.todo, "To Do"),
-        (.in_progress, "Progress"),
-        (.test, "Test"),
-        (.done, "Done"),
+    let statuses: [(ItemStatusDTO, String)] = [
+        (.backlog, "Backlog"),
+        (.inProgress, "Progress"),
+        (.testing, "Test"),
+        (.completed, "Done"),
         (.blocked, "Blocked")
     ]
     
@@ -166,12 +164,15 @@ struct StatusGalleryView: View {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 280))], spacing: 16) {
                 ForEach(statuses, id: \.0) { status, label in
                     NavigationLink {
-                        ItemDetailView(item: TierItem.makePreviewItem(
-                            type: .feature,
-                            title: "\(label) Feature Item",
-                            status: status,
-                            priority: 50
-                        ))
+                        ItemDetailView(
+                            item: TierItemDTO.makePreviewItem(
+                                type: .feature,
+                                title: "\(label) Feature Item",
+                                status: status,
+                                priority: 50
+                            ),
+                            treeStore: TreeStore(mcpClient: MockMCPToolClient())
+                        )
                     } label: {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
@@ -195,5 +196,11 @@ struct StatusGalleryView: View {
             .padding()
         }
         .navigationTitle("Status Gallery")
+    }
+}
+
+class MockMCPToolClient: MCPToolClient {
+    init() {
+        super.init(clientManager: MCPClientManager())
     }
 }

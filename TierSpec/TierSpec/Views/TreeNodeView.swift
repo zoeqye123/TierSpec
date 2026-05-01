@@ -8,14 +8,14 @@
 import SwiftUI
 
 struct TreeNodeView: View {
-    let item: TierItem
-    let loadChildren: (TierItem) -> [TierItem]
-    @Binding var selectedItem: TierItem?
+    let item: TierItemDTO
+    let loadChildren: (TierItemDTO) -> [TierItemDTO]
+    @Binding var selectedItem: TierItemDTO?
     @Binding var expandedItems: Set<UUID>
     
-    let onAddChild: (TierItem, ItemType) -> Void
-    let onDelete: (TierItem) -> Void
-    let onUpdateTitle: (TierItem, String) -> Void
+    let onAddChild: (TierItemDTO, ItemTypeDTO) -> Void
+    let onDelete: (TierItemDTO) -> Void
+    let onUpdateTitle: (TierItemDTO, String) -> Void
     
     @State private var isHovered: Bool = false
     @State private var isEditing: Bool = false
@@ -26,7 +26,7 @@ struct TreeNodeView: View {
         expandedItems.contains(item.id)
     }
     
-    private var children: [TierItem] {
+    private var children: [TierItemDTO] {
         isExpanded ? loadChildren(item) : []
     }
     
@@ -189,9 +189,9 @@ struct TreeNodeView: View {
             return .blue
         case .feature:
             return .green
-        case .user_story:
+        case .userStory:
             return .orange
-        case .test_case:
+        case .testCase:
             return .purple
         }
     }
@@ -219,17 +219,43 @@ struct TreeNodeView: View {
 
 extension TreeNodeView {
     static func makeSampleItem(
-        type: ItemType,
+        type: ItemTypeDTO,
         title: String,
-        status: ItemStatus = .todo,
-        children: [TierItem] = []
-    ) -> TierItem {
-        let item = TierItem(
+        status: ItemStatusDTO = .backlog,
+        children: [TierItemDTO] = []
+    ) -> TierItemDTO {
+        TierItemDTO(
+            id: UUID(),
             type: type,
+            parentId: nil,
+            sprintId: nil,
             title: title,
-            status: status
+            description: nil,
+            status: status,
+            priority: 0,
+            position: 0,
+            storyPoints: nil,
+            complexity: nil,
+            aiGenerated: false,
+            aiConfidence: nil,
+            aiReasoning: nil,
+            labels: [],
+            createdAt: Date(),
+            updatedAt: Date(),
+            deletedAt: nil,
+            children: children
         )
-        item.children = children
-        return item
     }
+}
+
+#Preview {
+    TreeNodeView(
+        item: TreeNodeView.makeSampleItem(type: .capability, title: "Sample"),
+        loadChildren: { _ in [] },
+        selectedItem: .constant(nil),
+        expandedItems: .constant([]),
+        onAddChild: { _, _ in },
+        onDelete: { _ in },
+        onUpdateTitle: { _, _ in }
+    )
 }

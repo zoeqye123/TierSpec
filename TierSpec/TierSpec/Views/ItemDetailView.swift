@@ -6,21 +6,20 @@
 //
 
 import SwiftUI
-import SwiftData
 
 struct ItemDetailView: View {
-    @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     
-    let item: TierItem
+    let item: TierItemDTO
+    @ObservedObject var treeStore: TreeStore
     
     @State private var isEditing: Bool = false
     @State private var draftTitle: String = ""
     @State private var draftDescription: String = ""
-    @State private var draftStatus: ItemStatus = .todo
+    @State private var draftStatus: ItemStatusDTO = .backlog
     @State private var draftPriority: Int = 0
     @State private var draftStoryPoints: Int?
-    @State private var draftComplexity: Complexity?
+    @State private var draftComplexity: ComplexityDTO?
     @State private var validationError: String?
     
     var body: some View {
@@ -31,7 +30,7 @@ struct ItemDetailView: View {
                 Divider()
                 
                 if isEditing {
-                    ItemDetailForm(
+                    ItemDetailFormDTO(
                         title: $draftTitle,
                         description: $draftDescription,
                         status: $draftStatus,
@@ -70,8 +69,6 @@ struct ItemDetailView: View {
     
     private var headerView: some View {
         VStack(alignment: .leading, spacing: 8) {
-            breadcrumbView
-            
             HStack(spacing: 12) {
                 Image(systemName: item.type.icon)
                     .font(.title2)
@@ -107,34 +104,15 @@ struct ItemDetailView: View {
         }
     }
     
-    @ViewBuilder
-    private var breadcrumbView: some View {
-        if item.depth > 0 {
-            HStack(spacing: 4) {
-                ForEach(Array(item.path.dropLast().enumerated()), id: \.element.id) { index, pathItem in
-                    if index > 0 {
-                        Image(systemName: "chevron.right")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
-                    Text(pathItem.title)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-        }
-    }
-    
     private var readOnlyContent: some View {
         VStack(alignment: .leading, spacing: 16) {
-            DetailRow(label: "Title", value: item.title)
+            DetailRowDTO(label: "Title", value: item.title)
             
-            if let description = item.itemDescription, !description.isEmpty {
-                DetailRow(label: "Description", value: description, isMultiline: true)
+            if let description = item.description, !description.isEmpty {
+                DetailRowDTO(label: "Description", value: description, isMultiline: true)
             }
             
-            DetailRow(label: "Status") {
+            DetailRowDTO(label: "Status") {
                 HStack(spacing: 6) {
                     Circle()
                         .fill(item.status.color)
@@ -143,22 +121,22 @@ struct ItemDetailView: View {
                 }
             }
             
-            DetailRow(label: "Priority", value: "\(item.priority)")
+            DetailRowDTO(label: "Priority", value: "\(item.priority)")
             
             if let storyPoints = item.storyPoints {
-                DetailRow(label: "Story Points", value: "\(storyPoints)")
+                DetailRowDTO(label: "Story Points", value: "\(storyPoints)")
             }
             
             if let complexity = item.complexity {
-                DetailRow(label: "Complexity") {
+                DetailRowDTO(label: "Complexity") {
                     Text(complexity.displayName)
                         .foregroundStyle(complexity.color)
                 }
             }
             
             if !item.labels.isEmpty {
-                DetailRow(label: "Labels") {
-                    FlowLayout(spacing: 4) {
+                DetailRowDTO(label: "Labels") {
+                    FlowLayoutDTO(spacing: 4) {
                         ForEach(item.labels, id: \.self) { label in
                             Text(label)
                                 .font(.caption)
@@ -192,7 +170,7 @@ struct ItemDetailView: View {
                 }
             }
             
-            if item.type == .user_story {
+            if item.type == .userStory {
                 testCasesSection
             }
         }
@@ -200,7 +178,7 @@ struct ItemDetailView: View {
     
     @ViewBuilder
     private var testCasesSection: some View {
-        let testCases = (item.children ?? []).filter { $0.deletedAt == nil }
+        let testCases = item.children.filter { $0.deletedAt == nil }
         
         Divider()
         
@@ -226,7 +204,7 @@ struct ItemDetailView: View {
                     .foregroundStyle(.tertiary)
             } else {
                 ForEach(testCases.sorted { $0.position < $1.position }) { tc in
-                    TestCaseRow(testCase: tc)
+                    TestCaseRowDTO(testCase: tc)
                 }
             }
         }
@@ -276,7 +254,7 @@ struct ItemDetailView: View {
     
     private func startEditing() {
         draftTitle = item.title
-        draftDescription = item.itemDescription ?? ""
+        draftDescription = item.description ?? ""
         draftStatus = item.status
         draftPriority = item.priority
         draftStoryPoints = item.storyPoints
@@ -298,7 +276,7 @@ struct ItemDetailView: View {
         
         if draftStatus != item.status {
             do {
-                try StateMachine.assertValidTransition(
+                try StateMachineDTO.assertValidTransition(
                     from: item.status,
                     to: draftStatus,
                     actorType: item.aiGenerated ? .ai : .human
@@ -309,44 +287,73 @@ struct ItemDetailView: View {
             }
         }
         
-        item.title = draftTitle
-        item.itemDescription = draftDescription.isEmpty ? nil : draftDescription
-        item.status = draftStatus
-        item.priority = draftPriority
-        item.storyPoints = draftStoryPoints
-        item.complexity = draftComplexity
-        item.touch()
+        Task {
+            let updatedItem = TierItemDTO(
+                id: item.id,
+                type: item.type,
+                parentId: item.parentId,
+                sprintId: item.sprintId,
+                title: draftTitle,
+                description: draftDescription.isEmpty ? nil : draftDescription,
+                status: draftStatus,
+                priority: draftPriority,
+                position: item.position,
+                storyPoints: draftStoryPoints,
+                complexity: draftComplexity,
+                aiGenerated: item.aiGenerated,
+                aiConfidence: item.aiConfidence,
+                aiReasoning: item.aiReasoning,
+                labels: item.labels,
+                createdAt: item.createdAt,
+                updatedAt: Date(),
+                deletedAt: item.deletedAt,
+                children: item.children
+            )
+            await treeStore.updateItem(updatedItem)
+        }
         
         isEditing = false
         validationError = nil
     }
     
     private func addTestCase() {
-        let nextPosition = Double((item.children ?? []).filter({ $0.deletedAt == nil }).count)
-        let testCase = TierItem(
-            type: .test_case,
+        let nextPosition = Double(item.children.filter({ $0.deletedAt == nil }).count)
+        let testCase = TierItemDTO(
+            id: UUID(),
+            type: .testCase,
+            parentId: item.id,
+            sprintId: nil,
             title: "New Test Case",
             description: nil,
-            status: .todo,
-            position: nextPosition
+            status: .backlog,
+            priority: 0,
+            position: nextPosition,
+            storyPoints: nil,
+            complexity: nil,
+            aiGenerated: false,
+            aiConfidence: nil,
+            aiReasoning: nil,
+            labels: [],
+            createdAt: Date(),
+            updatedAt: Date(),
+            deletedAt: nil,
+            children: []
         )
-        testCase.parent = item
-        if item.children == nil {
-            item.children = []
+        
+        Task {
+            await treeStore.createItem(testCase, parent: item)
         }
-        item.children?.append(testCase)
-        modelContext.insert(testCase)
     }
 }
 
-struct TestCaseRow: View {
-    let testCase: TierItem
+struct TestCaseRowDTO: View {
+    let testCase: TierItemDTO
     
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "checkmark.shield")
                 .font(.caption)
-                .foregroundStyle(testCase.status == .done ? .green : .secondary)
+                .foregroundStyle(testCase.status == .completed ? .green : .secondary)
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(testCase.title)
@@ -366,7 +373,7 @@ struct TestCaseRow: View {
     }
 }
 
-struct DetailRow<Content: View>: View {
+struct DetailRowDTO<Content: View>: View {
     let label: String
     let content: () -> Content
     
@@ -394,16 +401,16 @@ struct DetailRow<Content: View>: View {
     }
 }
 
-struct FlowLayout: Layout {
+struct FlowLayoutDTO: Layout {
     var spacing: CGFloat = 8
     
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let result = FlowResult(in: proposal.width ?? 0, subviews: subviews, spacing: spacing)
+        let result = FlowResultDTO(in: proposal.width ?? 0, subviews: subviews, spacing: spacing)
         return result.size
     }
     
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let result = FlowResult(in: bounds.width, subviews: subviews, spacing: spacing)
+        let result = FlowResultDTO(in: bounds.width, subviews: subviews, spacing: spacing)
         for (index, subview) in subviews.enumerated() {
             subview.place(at: CGPoint(x: bounds.minX + result.positions[index].x,
                                        y: bounds.minY + result.positions[index].y),
@@ -411,7 +418,7 @@ struct FlowLayout: Layout {
         }
     }
     
-    struct FlowResult {
+    struct FlowResultDTO {
         var size: CGSize = .zero
         var positions: [CGPoint] = []
         
@@ -437,4 +444,138 @@ struct FlowLayout: Layout {
             self.size = CGSize(width: maxWidth, height: y + rowHeight)
         }
     }
+}
+
+struct ItemDetailFormDTO: View {
+    @Binding var title: String
+    @Binding var description: String
+    @Binding var status: ItemStatusDTO
+    @Binding var priority: Int
+    @Binding var storyPoints: Int?
+    @Binding var complexity: ComplexityDTO?
+    @Binding var validationError: String?
+    
+    let originalStatus: ItemStatusDTO
+    let actorType: ActorTypeDTO
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Title")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+                TextField("Title", text: $title)
+                    .textFieldStyle(.roundedBorder)
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Description")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+                TextEditor(text: $description)
+                    .frame(minHeight: 80)
+                    .border(Color.secondary.opacity(0.2))
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Status")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+                Picker("Status", selection: $status) {
+                    ForEach(ItemStatusDTO.allCases, id: \.self) { s in
+                        Text(s.displayName).tag(s)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Priority")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+                Stepper("Priority: \(priority)", value: $priority, in: 0...100)
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Story Points")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+                OptionalStepper(value: $storyPoints, in: 1...21, step: 1)
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Complexity")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+                Picker("Complexity", selection: $complexity) {
+                    Text("None").tag(nil as ComplexityDTO?)
+                    ForEach(ComplexityDTO.allCases, id: \.self) { c in
+                        Text(c.displayName).tag(c as ComplexityDTO?)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+        }
+    }
+}
+
+struct OptionalStepper: View {
+    @Binding var value: Int?
+    let range: ClosedRange<Int>
+    let step: Int
+    
+    init(value: Binding<Int?>, in range: ClosedRange<Int>, step: Int) {
+        self._value = value
+        self.range = range
+        self.step = step
+    }
+    
+    var body: some View {
+        HStack {
+            Toggle("Set", isOn: Binding(
+                get: { value != nil },
+                set: { if $0 { value = range.lowerBound } else { value = nil } }
+            ))
+            
+            if let current = value {
+                Stepper("\(current) pts", value: Binding(
+                    get: { current },
+                    set: { value = $0 }
+                ), in: range, step: step)
+            }
+        }
+    }
+}
+
+#Preview {
+    ItemDetailView(
+        item: TierItemDTO(
+            id: UUID(),
+            type: .userStory,
+            parentId: nil,
+            sprintId: nil,
+            title: "Sample Story",
+            description: "A sample story",
+            status: .backlog,
+            priority: 50,
+            position: 0,
+            storyPoints: 5,
+            complexity: .m,
+            aiGenerated: false,
+            aiConfidence: nil,
+            aiReasoning: nil,
+            labels: ["frontend"],
+            createdAt: Date(),
+            updatedAt: Date(),
+            deletedAt: nil,
+            children: []
+        ),
+        treeStore: TreeStore(mcpClient: MockMCPToolClient())
+    )
 }
