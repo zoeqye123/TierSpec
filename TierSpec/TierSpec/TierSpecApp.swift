@@ -263,6 +263,7 @@ struct WelcomeView: View {
 
 struct ConnectionView: View {
     @ObservedObject var mcpClientManager: MCPClientManager
+    @State private var showingHelp = false
     
     var body: some View {
         VStack(spacing: 24) {
@@ -280,54 +281,7 @@ struct ConnectionView: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                 
-                Divider()
-                    .frame(width: 200)
-                
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("To start the MCP server, run:")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    
-                    HStack {
-                        Text("cd /Users/z/project/tierspec/mcp-server && npm run build && node dist/index.js")
-                            .font(.system(.body, design: .monospaced))
-                            .padding(12)
-                            .background(Color.secondary.opacity(0.1))
-                            .cornerRadius(8)
-                        
-                        Button {
-                            let pasteboard = NSPasteboard.general
-                            pasteboard.clearContents()
-                            pasteboard.setString("cd /Users/z/project/tierspec/mcp-server && npm run build && node dist/index.js", forType: .string)
-                        } label: {
-                            Image(systemName: "doc.on.doc")
-                        }
-                        .help("Copy to clipboard")
-                    }
-                    
-                    Text("Or ask your AI assistant:")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 8)
-                    
-                    HStack {
-                        Text("Please start the TierSpec MCP server by running: cd /Users/z/project/tierspec/mcp-server && npm run build && node dist/index.js")
-                            .font(.system(.body, design: .monospaced))
-                            .padding(12)
-                            .background(Color.secondary.opacity(0.1))
-                            .cornerRadius(8)
-                        
-                        Button {
-                            let pasteboard = NSPasteboard.general
-                            pasteboard.clearContents()
-                            pasteboard.setString("Please start the TierSpec MCP server by running: cd /Users/z/project/tierspec/mcp-server && npm run build && node dist/index.js", forType: .string)
-                        } label: {
-                            Image(systemName: "doc.on.doc")
-                        }
-                        .help("Copy to clipboard")
-                    }
-                }
-                .frame(maxWidth: 500)
+                helpSection
                 
                 Button("Retry") {
                     Task {
@@ -344,8 +298,74 @@ struct ConnectionView: View {
                 Text("Connecting to MCP Server...")
                     .font(.headline)
                     .foregroundStyle(.secondary)
+                
+                Button("Show Setup Instructions") {
+                    showingHelp = true
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+                .padding(.top, 8)
+                
+                if showingHelp {
+                    helpSection
+                }
             }
         }
-        .frame(minWidth: 500, minHeight: 400)
+        .frame(minWidth: 600, minHeight: 500)
+    }
+    
+    private var helpSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Divider()
+                .frame(width: 200)
+            
+            Text("Setup Instructions")
+                .font(.headline)
+            
+            Text("The MCP server must be running for TierSpec to work. Start it with:")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            
+            HStack {
+                Text("cd /Users/z/project/tierspec/mcp-server && npm run build && node dist/index.js")
+                    .font(.system(.caption, design: .monospaced))
+                    .padding(10)
+                    .background(Color.secondary.opacity(0.1))
+                    .cornerRadius(6)
+                
+                Button {
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.setString("cd /Users/z/project/tierspec/mcp-server && npm run build && node dist/index.js", forType: .string)
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                }
+                .help("Copy to clipboard")
+            }
+            
+            Text("Or ask your AI assistant:")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .padding(.top, 8)
+            
+            HStack {
+                Text("Please start the TierSpec MCP server")
+                    .font(.system(.caption, design: .monospaced))
+                    .padding(10)
+                    .background(Color.secondary.opacity(0.1))
+                    .cornerRadius(6)
+                
+                Button {
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.setString("Please start the TierSpec MCP server by running: cd /Users/z/project/tierspec/mcp-server && npm run build && node dist/index.js", forType: .string)
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                }
+                .help("Copy to clipboard")
+            }
+        }
+        .frame(maxWidth: 550)
+        .padding(.top, 8)
     }
 }
