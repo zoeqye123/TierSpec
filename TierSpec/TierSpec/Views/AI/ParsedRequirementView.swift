@@ -139,7 +139,7 @@ private struct StatBadge: View {
         VStack(spacing: 4) {
             Image(systemName: icon)
                 .font(.title3)
-                .foregroundStyle(.accent)
+                .foregroundStyle(Color.accentColor)
             
             Text("\(count)")
                 .font(.title2)

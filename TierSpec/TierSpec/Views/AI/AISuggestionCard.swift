@@ -128,15 +128,6 @@ struct AISuggestionCard: View {
 // MARK: - ItemType Extensions
 
 extension ItemTypeDTO {
-    var icon: String {
-        switch self {
-        case .capability: return "cube.box"
-        case .feature: return "square.grid.2x2"
-        case .userStory: return "person.text.rectangle"
-        case .testCase: return "checkmark.shield"
-        }
-    }
-    
     var color: Color {
         switch self {
         case .capability: return .blue

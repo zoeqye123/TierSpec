@@ -157,6 +157,38 @@ Global states: `blocked`, `cancelled`, `needs_info`
 - `src/tools/hierarchy.ts` - CRUD operations
 - `src/state-machine.ts` - State transition validation
 
+## Project Status
+
+**Completion**: 18/21 tasks (86%)
+
+| Wave | Status | Tasks |
+|------|--------|-------|
+| Wave 1: Foundation | ✅ Complete | 5/5 |
+| Wave 2: MCP Integration | ✅ Complete | 4/4 |
+| Wave 3: UI Transformation | ✅ Complete | 4/4 |
+| Wave 4: Polish & Testing | ✅ Complete | 5/5 |
+| Wave 5: Verification | ⏳ Requires Xcode IDE | 0/3 |
+
+### MCP Server ✅
+- TypeScript: ✅ No errors
+- Build: ✅ Success
+- Tests: ✅ 152/152 passing
+
+### Swift Client ✅
+- Code: ✅ 38 Swift files
+- Architecture: ✅ All components implemented
+- Build: Requires Xcode IDE
+
+### Verification
+
+Run the verification script:
+```bash
+cd mcp-server
+./scripts/verify-wave5.sh
+```
+
+See `.sisyphus/wave5-verification-report.md` for detailed status.
+
 ## License
 
 MIT

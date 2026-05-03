@@ -11,7 +11,7 @@ struct MainView: View {
 
 private struct MainViewWithStore: View {
     @StateObject private var treeStore: TreeStore
-    @StateObject private var aiViewModel: AIWorkflowViewModel
+    @State private var aiViewModel: AIWorkflowViewModel
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var showingAISuggestions = false
     @FocusState private var aiInputFocused: Bool
@@ -20,7 +20,7 @@ private struct MainViewWithStore: View {
     
     init(mcpToolClient: MCPToolClient, projectName: String) {
         _treeStore = StateObject(wrappedValue: TreeStore(mcpClient: mcpToolClient))
-        _aiViewModel = StateObject(wrappedValue: AIWorkflowViewModel(mcpClient: mcpToolClient))
+        _aiViewModel = State(wrappedValue: AIWorkflowViewModel(mcpClient: mcpToolClient))
         self.projectName = projectName
     }
     
@@ -328,7 +328,7 @@ struct SuggestionCardWithDetails: View {
                     .foregroundStyle(.secondary)
             }
             
-            ReasoningPanel(reasoning: suggestion.reasoning)
+            ReasoningPanel(reasoning: suggestion.reasoning, confidence: suggestion.confidence)
             
             if let estimate = complexityEstimate {
                 HStack {
