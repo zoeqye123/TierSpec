@@ -160,9 +160,9 @@ describe('query tools', () => {
     insertItem(testDb.database, { id: 'cap-1', type: ItemType.Capability, title: 'Platform' });
     insertItem(testDb.database, { id: 'cap-2', type: ItemType.Capability, title: 'Billing' });
 
-    testDb.database.prepare('UPDATE items SET status = ?, updated_by = ? WHERE id = ?').run('completed', 'user-1', 'cap-2');
+    testDb.database.prepare('UPDATE items SET status = ?, updated_by = ? WHERE id = ?').run('done', 'user-1', 'cap-2');
 
-    const items = listItems(testDb.database, { status: 'completed' });
+    const items = listItems(testDb.database, { status: 'done' });
 
     expect(items.map((item) => item.id)).toEqual(['cap-2']);
   });
@@ -171,11 +171,11 @@ describe('query tools', () => {
     insertItem(testDb.database, { id: 'cap-1', type: ItemType.Capability, title: 'Platform' });
     insertItem(testDb.database, { id: 'cap-2', type: ItemType.Capability, title: 'Billing' });
 
-    testDb.database.prepare('UPDATE items SET status = ?, updated_by = ? WHERE id = ?').run('waiting_for_test', 'user-1', 'cap-2');
+    testDb.database.prepare('UPDATE items SET status = ?, updated_by = ? WHERE id = ?').run('test', 'user-1', 'cap-2');
 
     const result = searchItems(testDb.database, {
       query: 'billing',
-      filters: { status: 'waiting_for_test' },
+      filters: { status: 'test' },
     });
 
     expect(result.items.map((item) => item.id)).toEqual(['cap-2']);

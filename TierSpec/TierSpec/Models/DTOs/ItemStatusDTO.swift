@@ -8,58 +8,42 @@
 import Foundation
 
 /// Data Transfer Object for ItemStatus, matching MCP server JSON responses
-/// This enum matches the state machine states from the MCP server
+/// This enum matches the 7-state SDLC from the MCP server schema:
+/// todo → in_progress → test → done
+/// Global states: blocked, cancelled, needs_info
 enum ItemStatusDTO: String, Codable, CaseIterable {
-    case requirementInput = "requirement_input"
-    case requirementReview = "requirement_review"
-    case needsInfo = "needs_info"
-    case backlog
-    case aiDecomposing = "ai_decomposing"
+    case todo
     case inProgress = "in_progress"
-    case waitingForTest = "waiting_for_test"
-    case testing
-    case acceptance
-    case completed
-    case published
+    case test
+    case done
     case blocked
     case cancelled
+    case needsInfo = "needs_info"
     
     /// Human-readable display name
     var displayName: String {
         switch self {
-        case .requirementInput:
-            return "Requirement Input"
-        case .requirementReview:
-            return "Requirement Review"
-        case .needsInfo:
-            return "Needs Info"
-        case .backlog:
-            return "Backlog"
-        case .aiDecomposing:
-            return "AI Decomposing"
+        case .todo:
+            return "To Do"
         case .inProgress:
             return "In Progress"
-        case .waitingForTest:
-            return "Waiting for Test"
-        case .testing:
+        case .test:
             return "Testing"
-        case .acceptance:
-            return "Acceptance"
-        case .completed:
-            return "Completed"
-        case .published:
-            return "Published"
+        case .done:
+            return "Done"
         case .blocked:
             return "Blocked"
         case .cancelled:
             return "Cancelled"
+        case .needsInfo:
+            return "Needs Info"
         }
     }
     
     /// Whether this is a terminal state (no further transitions)
     var isTerminal: Bool {
         switch self {
-        case .completed, .cancelled, .published:
+        case .done, .cancelled:
             return true
         default:
             return false
@@ -69,10 +53,35 @@ enum ItemStatusDTO: String, Codable, CaseIterable {
     /// Whether this status indicates active work
     var isActive: Bool {
         switch self {
-        case .inProgress, .testing, .aiDecomposing:
+        case .inProgress, .test:
             return true
         default:
             return false
         }
+    }
+    
+    /// Valid next states from this state
+    var validTransitions: [ItemStatusDTO] {
+        switch self {
+        case .todo:
+            return [.inProgress, .blocked, .cancelled, .needsInfo]
+        case .inProgress:
+            return [.test, .blocked, .cancelled, .needsInfo, .todo]
+        case .test:
+            return [.done, .inProgress, .blocked, .cancelled, .needsInfo]
+        case .done:
+            return []  // Terminal state
+        case .blocked:
+            return [.todo, .inProgress, .test, .cancelled, .needsInfo]  // Return to previous state
+        case .cancelled:
+            return []  // Terminal state
+        case .needsInfo:
+            return [.todo, .inProgress, .blocked, .cancelled]
+        }
+    }
+    
+    /// Check if transition to a new state is valid
+    func canTransition(to newState: ItemStatusDTO) -> Bool {
+        return validTransitions.contains(newState)
     }
 }

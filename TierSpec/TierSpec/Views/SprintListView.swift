@@ -163,7 +163,7 @@ struct SprintRowView: View {
     }
 
     private var completedStoryCount: Int {
-        storyItems.filter { $0.status == .completed }.count
+        storyItems.filter { $0.status == .done }.count
     }
 
     private var storyProgress: Double {
@@ -335,7 +335,7 @@ struct SprintFormView: View {
 
 struct SprintDetailView: View {
     @Environment(\.dismiss) private var dismiss
-    @Bindable var sprint: SprintDTO
+    @State var sprint: SprintDTO
     
     @State private var allItems: [TierItemDTO] = []
     

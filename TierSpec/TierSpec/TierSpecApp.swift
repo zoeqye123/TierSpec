@@ -85,7 +85,7 @@ private struct ProjectWindowSceneView: View {
         Group {
             if mcpClientManager.isConnected {
                 if let project = projectManager.currentProject, let mcpToolClient = mcpToolClient {
-                    ContentView(projectName: project.name, mcpToolClient: mcpToolClient)
+                    MainView(mcpToolClient: mcpToolClient, projectName: project.name)
                         .navigationTitle(project.name)
                 } else {
                     WelcomeView(projectManager: projectManager)
@@ -280,6 +280,55 @@ struct ConnectionView: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                 
+                Divider()
+                    .frame(width: 200)
+                
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("To start the MCP server, run:")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    
+                    HStack {
+                        Text("cd /Users/z/project/tierspec/mcp-server && npm run build && node dist/index.js")
+                            .font(.system(.body, design: .monospaced))
+                            .padding(12)
+                            .background(Color.secondary.opacity(0.1))
+                            .cornerRadius(8)
+                        
+                        Button {
+                            let pasteboard = NSPasteboard.general
+                            pasteboard.clearContents()
+                            pasteboard.setString("cd /Users/z/project/tierspec/mcp-server && npm run build && node dist/index.js", forType: .string)
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                        }
+                        .help("Copy to clipboard")
+                    }
+                    
+                    Text("Or ask your AI assistant:")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 8)
+                    
+                    HStack {
+                        Text("Please start the TierSpec MCP server by running: cd /Users/z/project/tierspec/mcp-server && npm run build && node dist/index.js")
+                            .font(.system(.body, design: .monospaced))
+                            .padding(12)
+                            .background(Color.secondary.opacity(0.1))
+                            .cornerRadius(8)
+                        
+                        Button {
+                            let pasteboard = NSPasteboard.general
+                            pasteboard.clearContents()
+                            pasteboard.setString("Please start the TierSpec MCP server by running: cd /Users/z/project/tierspec/mcp-server && npm run build && node dist/index.js", forType: .string)
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                        }
+                        .help("Copy to clipboard")
+                    }
+                }
+                .frame(maxWidth: 500)
+                
                 Button("Retry") {
                     Task {
                         try? await mcpClientManager.connect()
@@ -287,6 +336,7 @@ struct ConnectionView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
+                .padding(.top, 8)
             } else {
                 ProgressView()
                     .scaleEffect(1.5)
@@ -296,6 +346,6 @@ struct ConnectionView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .frame(minWidth: 400, minHeight: 300)
+        .frame(minWidth: 500, minHeight: 400)
     }
 }

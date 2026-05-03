@@ -32,7 +32,7 @@ describe('MCP server integration', () => {
     void runtime.close();
   });
 
-  it('registers all 14 tools over the MCP protocol', async () => {
+  it('registers all 20 tools over the MCP protocol', async () => {
     const runtime = createTierSpecServer({
       database: testDb.database,
       actorUserId: 'user-1',
@@ -44,7 +44,7 @@ describe('MCP server integration', () => {
 
     const listed = await client.listTools();
 
-    expect(listed.tools).toHaveLength(14);
+    expect(listed.tools).toHaveLength(20);
     expect(listed.tools.map((tool) => tool.name).sort()).toEqual([...ALL_TOOL_NAMES].sort());
 
     await Promise.all([client.close(), runtime.close()]);
@@ -111,7 +111,7 @@ describe('MCP server integration', () => {
     });
     testDb.database
       .prepare('UPDATE items SET status = ?, updated_by = ? WHERE id = ?')
-      .run('requirement_input', 'user-1', 'cap-review');
+      .run('todo', 'user-1', 'cap-review');
 
     const runtime = createTierSpecServer({
       database: testDb.database,
@@ -128,7 +128,7 @@ describe('MCP server integration', () => {
       name: 'transition_state',
       arguments: {
         item_id: 'cap-review',
-        new_state: 'requirement_review',
+        new_state: 'in_progress',
       },
     });
 
@@ -142,7 +142,7 @@ describe('MCP server integration', () => {
     expect(updated.structuredContent).toMatchObject({
       item: {
         id: 'cap-review',
-        status: 'requirement_review',
+        status: 'in_progress',
       },
     });
     expect(auditEvent.actor_id).toBe('workflow-actor');

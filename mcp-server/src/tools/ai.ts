@@ -160,7 +160,36 @@ export function createAITools({ database, defaultApiKey }: AIToolsOptions) {
 export function registerAITools(registrar: ToolRegistrar, options: AIToolsOptions) {
   const tools = createAITools(options);
 
-  registrar.registerTool('parse_requirement', tools.parse_requirement);
-  registrar.registerTool('estimate_complexity', tools.estimate_complexity);
-  registrar.registerTool('detect_dependencies', tools.detect_dependencies);
+  registrar.registerTool(
+    'parse_requirement',
+    {
+      title: 'Parse Requirement',
+      description: tools.parse_requirement.description,
+      inputSchema: tools.parse_requirement.inputSchema,
+      annotations: tools.parse_requirement.annotations,
+    },
+    tools.parse_requirement.handler,
+  );
+
+  registrar.registerTool(
+    'estimate_complexity',
+    {
+      title: 'Estimate Complexity',
+      description: tools.estimate_complexity.description,
+      inputSchema: tools.estimate_complexity.inputSchema,
+      annotations: tools.estimate_complexity.annotations,
+    },
+    tools.estimate_complexity.handler,
+  );
+
+  registrar.registerTool(
+    'detect_dependencies',
+    {
+      title: 'Detect Dependencies',
+      description: tools.detect_dependencies.description,
+      inputSchema: tools.detect_dependencies.inputSchema,
+      annotations: tools.detect_dependencies.annotations,
+    },
+    tools.detect_dependencies.handler,
+  );
 }

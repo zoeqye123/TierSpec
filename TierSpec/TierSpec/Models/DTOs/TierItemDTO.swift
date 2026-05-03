@@ -9,7 +9,7 @@ import Foundation
 
 /// Data Transfer Object for TierItem, matching MCP server JSON responses
 /// This is a plain struct without SwiftData annotations, used for decoding JSON from the MCP server
-struct TierItemDTO: Identifiable, Codable, Equatable {
+struct TierItemDTO: Identifiable, Codable, Equatable, Hashable {
     // MARK: - Identity
     
     /// Unique identifier
@@ -29,19 +29,19 @@ struct TierItemDTO: Identifiable, Codable, Equatable {
     // MARK: - Content
     
     /// Item title
-    let title: String
+    var title: String
     
     /// Detailed description
     let description: String?
     
     /// Current status in SDLC
-    let status: ItemStatusDTO
+    var status: ItemStatusDTO
     
     /// Priority (0-100)
     let priority: Int
     
     /// Position for ordering within parent (supports drag-drop)
-    let position: Double
+    var position: Double
     
     // MARK: - Estimation
     
@@ -73,7 +73,7 @@ struct TierItemDTO: Identifiable, Codable, Equatable {
     let createdAt: Date
     
     /// Last update timestamp
-    let updatedAt: Date
+    var updatedAt: Date
     
     /// Soft delete timestamp
     let deletedAt: Date?

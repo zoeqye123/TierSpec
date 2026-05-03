@@ -383,59 +383,7 @@ export function registerHierarchyTools(server: ToolRegistrar, options: Hierarchy
       description: 'Create a new item in the hierarchy',
       inputSchema: createItemSchema,
     },
-    (args) => createItem(database, args as CreateItemInput),
-  );
-
-  server.registerTool(
-    'get_item',
-    {
-      title: 'Get Item',
-      description: 'Get an item by ID with its children',
-      inputSchema: getItemSchema,
-      annotations: { readOnlyHint: true },
-    },
-    (args) => getItem(database, args as GetItemInput),
-  );
-
-  server.registerTool(
-    'move_item',
-    {
-      title: 'Move Item',
-      description: 'Move an item to a new parent',
-      inputSchema: moveItemSchema,
-    },
-    (args) => moveItem(database, args as MoveItemInput),
-  );
-
-  server.registerTool(
-    'reorder_items',
-    {
-      title: 'Reorder Items',
-      description: 'Reorder items within a parent',
-      inputSchema: reorderItemsSchema,
-    },
-    (args) => reorderItems(database, args as ReorderItemsInput),
-  );
-
-  server.registerTool(
-    'delete_item',
-    {
-      title: 'Delete Item',
-      description: 'Soft delete an item',
-      inputSchema: deleteItemSchema,
-      annotations: { destructiveHint: true },
-    },
-    (args) => deleteItem(database, args as DeleteItemInput),
-  );
-
-  server.registerTool(
-    'update_item',
-    {
-      title: 'Update Item',
-      description: 'Update an existing item',
-      inputSchema: updateItemSchema,
-    },
-    (args) => updateItem(database, args as UpdateItemInput),
+    async (args) => formatResult(tools.createItem(args as CreateItemInput)),
   );
 
   server.registerTool(

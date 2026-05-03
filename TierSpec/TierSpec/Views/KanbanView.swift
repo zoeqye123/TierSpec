@@ -32,22 +32,22 @@ enum KanbanColumn: String, CaseIterable {
     func contains(status: ItemStatusDTO) -> Bool {
         switch self {
         case .todo:
-            return [.requirementInput, .requirementReview, .needsInfo, .backlog].contains(status)
+            return [.todo, .needsInfo].contains(status)
         case .inProgress:
-            return [.inProgress, .aiDecomposing].contains(status)
+            return status == .inProgress
         case .test:
-            return [.waitingForTest, .testing, .acceptance].contains(status)
+            return status == .test
         case .done:
-            return [.completed, .published].contains(status)
+            return [.done, .blocked, .cancelled].contains(status)
         }
     }
     
     func toItemStatus() -> ItemStatusDTO {
         switch self {
-        case .todo: return .backlog
+        case .todo: return .todo
         case .inProgress: return .inProgress
-        case .test: return .testing
-        case .done: return .completed
+        case .test: return .test
+        case .done: return .done
         }
     }
 }
@@ -64,7 +64,7 @@ struct KanbanView: View {
     
     init(treeStore: TreeStore) {
         self._treeStore = ObservedObject(wrappedValue: treeStore)
-        _sprintStore = StateObject(wrappedValue: SprintStore(mcpClient: treeStore.repository.mcpClient))
+        _sprintStore = StateObject(wrappedValue: SprintStore(mcpClient: treeStore.mcpClient))
     }
     
     private var allItems: [TierItemDTO] {
@@ -174,7 +174,7 @@ struct KanbanView: View {
         guard item.status != newStatus else { return }
         
 do {
-            try StateMachineDTO.assertValidTransition(from: item.status, to: newDTOStatus, actorType: .human)
+            try StateMachineDTO.assertValidTransition(from: item.status, to: newStatus, actorType: .human)
         } catch let error as StateMachineDTOError {
             validationError = error
             showErrorAlert = true

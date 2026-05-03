@@ -12,7 +12,7 @@ actor ItemRepository {
     
     // MARK: - Properties
     
-    private let mcpClient: MCPToolClient
+    let mcpClient: MCPToolClient
     
     // MARK: - Initialization
     

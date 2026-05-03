@@ -62,7 +62,7 @@ struct ItemDetailViewFeaturePreview: PreviewProvider {
         let item = TierItemDTO.makePreviewItem(
             type: .feature,
             title: "OAuth 2.0 Integration",
-            status: .backlog,
+            status: .todo,
             priority: 70,
             storyPoints: 8,
             complexity: .l
@@ -79,7 +79,7 @@ struct ItemDetailViewUserStoryPreview: PreviewProvider {
         let item = TierItemDTO.makePreviewItem(
             type: .userStory,
             title: "Google Sign-In for Users",
-            status: .testing,
+            status: .test,
             priority: 85,
             storyPoints: 5,
             complexity: .m,
@@ -97,7 +97,7 @@ struct ItemDetailViewTestCasePreview: PreviewProvider {
         let item = TierItemDTO.makePreviewItem(
             type: .testCase,
             title: "Verify Token Expiry Handling",
-            status: .completed,
+            status: .done,
             priority: 50,
             storyPoints: 1,
             complexity: .xs
@@ -114,7 +114,7 @@ struct ItemDetailViewAIGeneratedPreview: PreviewProvider {
         let item = TierItemDTO.makePreviewItem(
             type: .userStory,
             title: "AI-Powered Recommendations",
-            status: .backlog,
+            status: .todo,
             priority: 75,
             storyPoints: 21,
             complexity: .xl,
@@ -152,10 +152,10 @@ struct ItemDetailViewStatusGalleryPreview: PreviewProvider {
 
 struct StatusGalleryView: View {
     let statuses: [(ItemStatusDTO, String)] = [
-        (.backlog, "Backlog"),
+        (.todo, "To Do"),
         (.inProgress, "Progress"),
-        (.testing, "Test"),
-        (.completed, "Done"),
+        (.test, "Test"),
+        (.done, "Done"),
         (.blocked, "Blocked")
     ]
     

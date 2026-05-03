@@ -109,26 +109,26 @@ describe('processSprintItems', () => {
       title: 'Test story behavior',
     });
 
-    testDb.database.prepare('UPDATE items SET deleted_at = datetime("now") WHERE id = ?').run('story-deleted');
+    testDb.database.prepare('UPDATE items SET deleted_at = datetime(\'now\') WHERE id = ?').run('story-deleted');
 
     testDb.database
-      .prepare('INSERT INTO sprint_assignments (id, item_id, sprint_id, assigned_by) VALUES (?, ?, ?, ?)')
-      .run('sa-4', 'story-active', 'sprint-1', 'user-1');
+      .prepare('INSERT INTO sprint_assignments (id, item_id, sprint_id, assigned_by, assigned_at) VALUES (?, ?, ?, ?, ?)')
+      .run('sa-4', 'story-active', 'sprint-1', 'user-1', '2026-04-01T10:00:00');
     testDb.database
-      .prepare('INSERT INTO sprint_assignments (id, item_id, sprint_id, assigned_by) VALUES (?, ?, ?, ?)')
-      .run('sa-5', 'story-removed', 'sprint-1', 'user-1');
+      .prepare('INSERT INTO sprint_assignments (id, item_id, sprint_id, assigned_by, assigned_at) VALUES (?, ?, ?, ?, ?)')
+      .run('sa-5', 'story-removed', 'sprint-1', 'user-1', '2026-04-01T10:01:00');
     testDb.database
-      .prepare('UPDATE sprint_assignments SET removed_at = datetime("now") WHERE id = ?')
+      .prepare('UPDATE sprint_assignments SET removed_at = datetime(\'now\') WHERE id = ?')
       .run('sa-5');
     testDb.database
-      .prepare('INSERT INTO sprint_assignments (id, item_id, sprint_id, assigned_by) VALUES (?, ?, ?, ?)')
-      .run('sa-6', 'story-deleted', 'sprint-1', 'user-1');
+      .prepare('INSERT INTO sprint_assignments (id, item_id, sprint_id, assigned_by, assigned_at) VALUES (?, ?, ?, ?, ?)')
+      .run('sa-6', 'story-deleted', 'sprint-1', 'user-1', '2026-04-01T10:02:00');
     testDb.database
-      .prepare('INSERT INTO sprint_assignments (id, item_id, sprint_id, assigned_by) VALUES (?, ?, ?, ?)')
-      .run('sa-7', 'test-case-1', 'sprint-1', 'user-1');
+      .prepare('INSERT INTO sprint_assignments (id, item_id, sprint_id, assigned_by, assigned_at) VALUES (?, ?, ?, ?, ?)')
+      .run('sa-7', 'test-case-1', 'sprint-1', 'user-1', '2026-04-01T10:03:00');
     testDb.database
-      .prepare('INSERT INTO sprint_assignments (id, item_id, sprint_id, assigned_by) VALUES (?, ?, ?, ?)')
-      .run('sa-8', 'story-active', 'sprint-2', 'user-1');
+      .prepare('INSERT INTO sprint_assignments (id, item_id, sprint_id, assigned_by, assigned_at) VALUES (?, ?, ?, ?, ?)')
+      .run('sa-8', 'story-active', 'sprint-2', 'user-1', '2026-04-15T10:00:00');
 
     const result = processSprintItems(testDb.database, { sprint_id: 'sprint-1' });
 

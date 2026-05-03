@@ -9,7 +9,7 @@ import Foundation
 
 /// Data Transfer Object for Sprint, matching MCP server JSON responses
 /// This is a plain struct without SwiftData annotations, used for decoding JSON from the MCP server
-struct SprintDTO: Identifiable, Codable, Equatable {
+struct SprintDTO: Identifiable, Codable, Equatable, Hashable {
     // MARK: - Identity
     
     /// Unique identifier
@@ -37,7 +37,7 @@ struct SprintDTO: Identifiable, Codable, Equatable {
     let capacityPoints: Int
     
     /// Current sprint status
-    let status: SprintStatusDTO
+    var status: SprintStatusDTO
     
     /// Committed story points
     let committedPoints: Int

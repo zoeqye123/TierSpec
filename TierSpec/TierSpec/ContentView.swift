@@ -45,11 +45,11 @@ private struct ContentViewWithStore: View {
                         searchField
                         Divider()
                         HierarchyTreeView(
+                            treeStore: treeStore,
                             selectedItem: selectedItemBinding,
                             onAddChild: addChild,
                             onDelete: deleteItem,
-                            onUpdateTitle: updateTitle,
-                            treeStore: treeStore
+                            onUpdateTitle: updateTitle
                         )
                     }
                 case .sprints:
@@ -145,7 +145,7 @@ private struct ContentViewWithStore: View {
             sprintId: nil,
             title: "New Capability",
             description: "Describe the business or technical capability.",
-            status: .backlog,
+            status: .todo,
             priority: 0,
             position: nextPosition,
             storyPoints: nil,
@@ -181,7 +181,7 @@ private struct ContentViewWithStore: View {
             sprintId: nil,
             title: "New \(type.displayName)",
             description: nil,
-            status: .backlog,
+            status: .todo,
             priority: 0,
             position: nextPosition,
             storyPoints: nil,

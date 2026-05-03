@@ -23,6 +23,11 @@ final class TreeStore: ObservableObject {
     private let repository: ItemRepository
     private var cancellables = Set<AnyCancellable>()
     
+    /// The MCP client used for communication with the server
+    var mcpClient: MCPToolClient {
+        repository.mcpClient
+    }
+    
     // MARK: - Initialization
     
     init(mcpClient: MCPToolClient) {

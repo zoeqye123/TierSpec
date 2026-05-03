@@ -29,12 +29,11 @@ describe('workflow tools', () => {
       title: 'Review Ready Capability',
     });
 
-    testDb.database.prepare('UPDATE items SET status = ?, updated_by = ? WHERE id = ?').run('requirement_input', 'user-1', item.id);
-
+    // Start from todo, transition to in_progress
     const updated = transitionState(testDb.database, {
       item_id: item.id,
-      new_state: 'requirement_review',
-      reason: 'Ready for triage',
+      new_state: 'in_progress',
+      reason: 'Starting work',
       actor_id: 'user-1',
     });
 
@@ -46,14 +45,14 @@ describe('workflow tools', () => {
       )
       .get(item.id) as { action_type: string; entity_type: string; entity_id: string; reason: string | null; changes: string };
 
-    expect(updated.status).toBe('requirement_review');
+    expect(updated.status).toBe('in_progress');
     expect(auditEvent).toMatchObject({
       action_type: 'STATE_CHANGE',
       entity_type: 'item',
       entity_id: item.id,
-      reason: 'Ready for triage',
+      reason: 'Starting work',
     });
-    expect(JSON.parse(auditEvent.changes)).toEqual([{ field: 'status', old: 'requirement_input', new: 'requirement_review' }]);
+    expect(JSON.parse(auditEvent.changes)).toEqual([{ field: 'status', old: 'todo', new: 'in_progress' }]);
   });
 
   it('block_item sets the item status to blocked and stores blocker metadata', () => {
@@ -118,48 +117,33 @@ describe('workflow tools', () => {
       title: 'Workflow item',
     });
 
-    testDb.database.prepare('UPDATE items SET status = ?, updated_by = ? WHERE id = ?').run('ai_decomposing', 'user-1', item.id);
+    // todo -> in_progress
     expect(
       transitionState(testDb.database, {
         item_id: item.id,
-        new_state: 'backlog',
+        new_state: 'in_progress',
         actor_id: 'user-1',
       }).status,
-    ).toBe('backlog');
+    ).toBe('in_progress');
 
-    testDb.database.prepare('UPDATE items SET status = ?, updated_by = ? WHERE id = ?').run('in_progress', 'user-1', item.id);
+    // in_progress -> test
     expect(
       transitionState(testDb.database, {
         item_id: item.id,
-        new_state: 'waiting_for_test',
+        new_state: 'test',
         actor_id: 'user-1',
       }).status,
-    ).toBe('waiting_for_test');
+    ).toBe('test');
 
+    // test -> done (human only)
     expect(
       transitionState(testDb.database, {
         item_id: item.id,
-        new_state: 'testing',
+        new_state: 'done',
         actor_id: 'user-1',
+        actor_type: 'human',
       }).status,
-    ).toBe('testing');
-
-    testDb.database.prepare('UPDATE items SET status = ?, updated_by = ? WHERE id = ?').run('acceptance', 'user-1', item.id);
-    expect(
-      transitionState(testDb.database, {
-        item_id: item.id,
-        new_state: 'completed',
-        actor_id: 'user-1',
-      }).status,
-    ).toBe('completed');
-
-    expect(
-      transitionState(testDb.database, {
-        item_id: item.id,
-        new_state: 'published',
-        actor_id: 'user-1',
-      }).status,
-    ).toBe('published');
+    ).toBe('done');
   });
 
   it('transition_state allows cancelling from any workflow state', () => {
@@ -169,7 +153,8 @@ describe('workflow tools', () => {
       title: 'Cancelable item',
     });
 
-    testDb.database.prepare('UPDATE items SET status = ?, updated_by = ? WHERE id = ?').run('published', 'user-1', item.id);
+    // Set to in_progress first
+    testDb.database.prepare('UPDATE items SET status = ?, updated_by = ? WHERE id = ?').run('in_progress', 'user-1', item.id);
 
     const updated = transitionState(testDb.database, {
       item_id: item.id,
@@ -187,7 +172,7 @@ describe('workflow tools', () => {
       title: 'Unblock item',
     });
 
-    testDb.database.prepare('UPDATE items SET status = ?, updated_by = ? WHERE id = ?').run('testing', 'user-1', item.id);
+    testDb.database.prepare('UPDATE items SET status = ?, updated_by = ? WHERE id = ?').run('in_progress', 'user-1', item.id);
 
     blockItem(testDb.database, {
       item_id: item.id,
@@ -198,11 +183,11 @@ describe('workflow tools', () => {
 
     const unblocked = transitionState(testDb.database, {
       item_id: item.id,
-      new_state: 'testing',
+      new_state: 'in_progress',
       actor_id: 'user-1',
     });
 
-    expect(unblocked.status).toBe('testing');
+    expect(unblocked.status).toBe('in_progress');
     expect(unblocked.previous_state).toBeNull();
     expect(unblocked.blocker_item_id).toBeNull();
     expect(unblocked.blocker_reason).toBeNull();

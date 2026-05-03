@@ -8,13 +8,18 @@
 TierSpec/
 ├── mcp-server/          # TypeScript MCP Server (backend)
 │   ├── src/index.ts     # MAIN ENTRYPOINT - stdio transport
-│   └── tests/           # Vitest test suite
+│   ├── src/ai/          # OpenAI integration for requirement parsing
+│   ├── src/tools/       # MCP tool implementations (20 tools)
+│   └── tests/           # Vitest test suite (152 tests)
 └── TierSpec/            # Swift Mac Client (frontend)
     └── TierSpec/
         ├── TierSpecApp.swift    # @main entry point
-        ├── Models/              # SwiftData models
+        ├── Models/DTOs/         # Data Transfer Objects (no SwiftData)
         ├── Views/               # SwiftUI views
-        └── Repositories/        # Data access layer
+        ├── ViewModels/          # Observable view models
+        ├── Services/            # MCP client, config, AI services
+        ├── Stores/              # State management (TreeStore)
+        └── Repositories/        # Data access layer (MCP-based)
 ```
 
 ## Commands
@@ -23,14 +28,14 @@ TierSpec/
 ```bash
 cd mcp-server
 npm run build      # Compile TypeScript → dist/
-npm run test       # Run vitest tests
+npm run test       # Run vitest tests (152 tests)
 npm run typecheck  # Type check without emit
 node dist/index.js # Start MCP server (stdio transport)
 ```
 
 ### Mac Client
 ```bash
-# Build from CLI
+# Build from CLI (requires Xcode)
 xcodebuild -project TierSpec/TierSpec.xcodeproj -scheme TierSpec -destination 'platform=macOS' build
 
 # Run tests
@@ -52,9 +57,9 @@ Capability (L1) → Feature (L2) → User Story (L3) → Test Case (L4)
 - `User Story` can be `Business` or `Technical` subtype
 - Parent-child validation in `ItemType.allowedChildTypes`
 
-## SDLC States
+## SDLC States (7-State Schema)
 
-7 states with enforced transitions:
+States with enforced transitions:
 
 ```
 todo → in_progress → test → done
@@ -63,6 +68,18 @@ todo → in_progress → test → done
 Global states: `blocked`, `cancelled`, `needs_info`
 
 State transitions are validated on Kanban drag-drop. Invalid transitions are rejected.
+
+### State Transition Rules
+
+| From | Valid To |
+|------|----------|
+| `todo` | `in_progress`, `blocked`, `cancelled`, `needs_info` |
+| `in_progress` | `test`, `todo`, `blocked`, `cancelled`, `needs_info` |
+| `test` | `done`, `in_progress`, `blocked`, `cancelled`, `needs_info` |
+| `done` | (terminal) |
+| `blocked` | (return to previous state), `cancelled` |
+| `cancelled` | (terminal) |
+| `needs_info` | `todo`, `in_progress`, `blocked`, `cancelled` |
 
 ## Actor Types
 
@@ -78,53 +95,78 @@ This ensures human oversight on completion. AI can suggest, draft, and update co
 
 ## Swift Patterns
 
-### SwiftData Models
-- `@Model` macro with `final class`
-- Self-referential hierarchy: `parent: TierItem?` / `children: [TierItem]?`
-- Inverse relationship: `@Relationship(inverse: \TierItem.parent)`
-- Soft delete: `deletedAt: Date?` with `isDeleted` computed property
+### DTO Models (No SwiftData)
+- Plain structs with `Codable` conformance
+- Map to MCP server JSON responses
+- `TierItemDTO`, `SprintDTO`, `ItemStatusDTO`, `ItemTypeDTO`
 
 ### Repository Pattern
 - `actor ItemRepository` for thread-safe data access
 - All calls require `await`
-- Uses `FetchDescriptor<TierItem>` with `#Predicate`
+- Uses `MCPToolClient` for all operations
+
+### View Models
+- `@MainActor @Observable` for SwiftUI integration
+- `AIWorkflowViewModel` for AI-powered requirement parsing
 
 ### Testing
 - Unit tests: Swift Testing framework (`import Testing`, `@Test`, `#expect`)
-- In-memory `ModelContainer` for isolation
-- UI tests: XCTest
+- MCP server tests: Vitest with 152 passing tests
 
-## MCP Server Tools
+## MCP Server Tools (20 Total)
 
 | Category | Tools |
 |----------|-------|
-| Hierarchy | `create_item`, `get_item`, `move_item`, `reorder_items`, `delete_item` |
+| Hierarchy | `create_item`, `get_item`, `move_item`, `reorder_items`, `delete_item`, `update_item` |
 | Query | `get_item_tree`, `search_items`, `list_items` |
 | Workflow | `transition_state`, `block_item` |
+| Sprint | `create_sprint`, `assign_to_sprint`, `get_sprint_status` |
+| Agent | `process_sprint_items`, `ask_clarification`, `update_story` |
+| AI | `parse_requirement`, `estimate_complexity`, `detect_dependencies` |
 
-## Agent Tools
+## AI Integration
 
-Tools for AI-assisted Sprint processing (manual trigger, not automatic):
+### Requirement Parsing Flow
+1. User enters natural language in `AIInputBar`
+2. `AIWorkflowViewModel.parseRequirement()` calls MCP `parse_requirement`
+3. Response mapped to `HierarchySuggestion` tree
+4. Displayed in `AISuggestionsSheet` with confidence scores
+5. User accepts/rejects suggestions
+6. Accepted suggestions create items via MCP `create_item`
 
-| Tool | Description |
-|------|-------------|
-| `process_sprint_items` | Process all items in current sprint, generate AI suggestions |
-| `ask_clarification` | Request clarification from user on ambiguous items |
-| `update_story` | Update story content with AI-generated text |
-
-These tools are invoked manually by the user. AI generates content but cannot mark items as done.
+### AI Tools
+- `parse_requirement` - Parse natural language into hierarchy
+- `estimate_complexity` - Estimate story points (1-8 Fibonacci)
+- `detect_dependencies` - Find dependencies between stories
 
 ## Environment Variables
 
 ```bash
 TSPEC_MCP_DB=/path/to/tierspec.db    # Database path (default: ~/.tierspec/tierspec.db)
 TSPEC_MCP_ACTOR=user-id              # Default actor (default: system)
+OPENAI_API_KEY=sk-...                # OpenAI API key for AI tools
 ```
+
+## Key Files
+
+### Swift Client
+- `Services/MCPClientManager.swift` - JSON-RPC client, process lifecycle
+- `Services/MCPToolClient.swift` - Type-safe wrappers for 20 MCP tools
+- `ViewModels/AIWorkflowViewModel.swift` - AI requirement parsing workflow
+- `Views/MainView.swift` - 3-column NavigationSplitView layout
+- `Views/AI/AIInputBar.swift` - Natural language input with ⌘K shortcut
+
+### MCP Server
+- `src/ai/client.ts` - OpenAI integration
+- `src/tools/ai.ts` - AI MCP tools
+- `src/tools/hierarchy.ts` - CRUD operations
+- `src/state-machine.ts` - State transition validation
 
 ## Notes
 
-- `Item.swift` is legacy template - `TierItem` is the actual model
+- DTOs replace SwiftData models - no `@Model` macro
 - AI integration is **suggestion-based** - human validates all AI output
 - Position uses `Double` for drag-drop reordering support
 - SQLite with closure tables for fast subtree queries
 - Full audit trail in `audit_events` table
+- All 152 MCP server tests pass

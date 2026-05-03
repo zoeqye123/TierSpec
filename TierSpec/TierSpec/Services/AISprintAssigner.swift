@@ -7,26 +7,19 @@
 
 import Foundation
 
-/// Represents a sprint assignment suggestion for an unassigned user story
 struct SprintAssignmentSuggestion: Identifiable {
     let id = UUID()
-    let story: TierItem
-    let suggestedSprint: Sprint
+    let story: TierItemDTO
+    let suggestedSprint: SprintDTO
     let reason: String
 }
 
-/// AI-powered service that suggests sprint assignments for unassigned user stories
 @Observable
 class AISprintAssigner {
     
-    /// Suggests sprint assignments for unassigned user stories
-    /// - Parameters:
-    ///   - unassignedStories: User stories without a sprint assignment
-    ///   - sprints: Available sprints to consider for assignment
-    /// - Returns: Array of suggestions, one per story that can be assigned
     func suggestAssignments(
-        unassignedStories: [TierItem],
-        sprints: [Sprint]
+        unassignedStories: [TierItemDTO],
+        sprints: [SprintDTO]
     ) -> [SprintAssignmentSuggestion] {
         var suggestions: [SprintAssignmentSuggestion] = []
         
@@ -69,14 +62,12 @@ class AISprintAssigner {
         return suggestions
     }
     
-    // MARK: - Private Helpers
-    
     private func findBestSprint(
-        for story: TierItem,
+        for story: TierItemDTO,
         storyPoints: Int,
-        sprints: [Sprint],
+        sprints: [SprintDTO],
         sprintCapacity: [UUID: Int]
-    ) -> Sprint? {
+    ) -> SprintDTO? {
         let activeSprints = sprints.filter { $0.status == .active }
         let planningSprints = sprints.filter { $0.status == .planning }
         
@@ -101,9 +92,9 @@ class AISprintAssigner {
     
     private func findSprintWithCapacity(
         storyPoints: Int,
-        sprints: [Sprint],
+        sprints: [SprintDTO],
         sprintCapacity: [UUID: Int]
-    ) -> Sprint? {
+    ) -> SprintDTO? {
         return sprints.first { sprint in
             let remaining = sprintCapacity[sprint.id] ?? 0
             return remaining >= storyPoints
@@ -111,8 +102,8 @@ class AISprintAssigner {
     }
     
     private func generateReason(
-        for story: TierItem,
-        sprint: Sprint,
+        for story: TierItemDTO,
+        sprint: SprintDTO,
         storyPoints: Int
     ) -> String {
         let priorityText = story.priority >= 70 ? "High priority" :

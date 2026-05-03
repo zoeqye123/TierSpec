@@ -5,9 +5,9 @@ AI-driven project management tool for Harness/Spec Engineers. Part of the TierSp
 ## Overview
 
 TierSpec MCP Server provides a Model Context Protocol (MCP) interface for hierarchical project management with:
-- 5-level hierarchy: Capability → Feature → Epic → Story → Test Case
+- 4-level hierarchy: Capability → Feature → User Story → Test Case
 - AI-assisted requirement decomposition (suggestion-based)
-- SDLC state machine with 13 states
+- SDLC state machine with 7 states
 - Sprint planning support
 - Full audit trail
 
@@ -34,14 +34,15 @@ The server uses stdio transport and can be connected to any MCP-compatible clien
 Environment variables:
 - `TSPEC_MCP_DB` - Database path (default: `~/.tierspec/tierspec.db`)
 - `TSPEC_MCP_ACTOR` - Default actor user ID (default: `system`)
+- `OPENAI_API_KEY` - OpenAI API key for AI tools
 
 Legacy compatibility aliases are also accepted:
 - `TIERSPEC_MCP_DB_PATH`
 - `TIERSPEC_MCP_ACTOR_ID`
 
-## MCP Tools
+## MCP Tools (20 Total)
 
-### Hierarchy Tools (5)
+### Hierarchy Tools (6)
 
 | Tool | Description |
 |------|-------------|
@@ -50,6 +51,7 @@ Legacy compatibility aliases are also accepted:
 | `move_item` | Reassign item to different parent |
 | `reorder_items` | Batch reorder within parent |
 | `delete_item` | Soft delete with optional cascade |
+| `update_item` | Update item fields |
 
 ### Query Tools (3)
 
@@ -66,30 +68,54 @@ Legacy compatibility aliases are also accepted:
 | `transition_state` | Change item status with validation |
 | `block_item` | Mark item as blocked |
 
-## State Machine
+### Sprint Tools (3)
+
+| Tool | Description |
+|------|-------------|
+| `create_sprint` | Create a new sprint |
+| `assign_to_sprint` | Assign items to sprint |
+| `get_sprint_status` | Get sprint status and metrics |
+
+### Agent Tools (3)
+
+| Tool | Description |
+|------|-------------|
+| `process_sprint_items` | Process sprint items for AI suggestions |
+| `ask_clarification` | Request clarification on ambiguous items |
+| `update_story` | Update story content |
+
+### AI Tools (3)
+
+| Tool | Description |
+|------|-------------|
+| `parse_requirement` | Parse natural language into hierarchy suggestions |
+| `estimate_complexity` | Estimate story points for user stories |
+| `detect_dependencies` | Detect dependencies between stories |
+
+## State Machine (7 States)
 
 Valid state transitions:
 
 ```
-requirement_input → requirement_review
-requirement_review → backlog, needs_info
-backlog → ai_decomposing
-ai_decomposing → backlog (on failure)
-in_progress → waiting_for_test
-waiting_for_test → testing
-testing → acceptance, in_progress (on failure)
-acceptance → completed, in_progress (on rejection)
-completed → published
-* → blocked (global)
-blocked → previous_state
-* → cancelled (global)
+todo → in_progress → test → done
 ```
+
+Global states available from any state:
+- `blocked` - Item is blocked by dependency
+- `cancelled` - Item is cancelled
+- `needs_info` - Item needs more information
+
+Special rules:
+- Only human actors can transition to `done`
+- Blocked items return to their previous state when unblocked
 
 ## Database Schema
 
 - **items** - Core hierarchical items
 - **item_paths** - Closure table for fast subtree queries
 - **item_parent_history** - Parent change audit trail
+- **sprints** - Sprint definitions
+- **sprint_assignments** - Item-to-sprint assignments
 - **users** - User accounts
 - **audit_events** - Full audit trail
 
@@ -117,6 +143,9 @@ mcp-server/
 │   ├── index.ts          # MCP entry point
 │   ├── server.ts         # Server factory and tool registration
 │   ├── state-machine.ts  # State transition validation
+│   ├── ai/
+│   │   ├── client.ts     # OpenAI integration
+│   │   └── types.ts      # AI type definitions
 │   ├── db/
 │   │   ├── client.ts     # SQLite database wrapper
 │   │   ├── migrate.ts    # Migration runner
@@ -125,14 +154,20 @@ mcp-server/
 │   ├── tools/
 │   │   ├── hierarchy.ts  # CRUD operations
 │   │   ├── query.ts      # Query operations
-│   │   └── workflow.ts   # State transitions
+│   │   ├── workflow.ts   # State transitions
+│   │   ├── sprint.ts     # Sprint management
+│   │   ├── agent.ts      # AI agent tools
+│   │   └ ai.ts           # AI parsing tools
 │   └── schemas/
 │       ├── hierarchy.ts  # Zod schemas
 │       ├── query.ts
-│       └── workflow.ts
+│       ├── workflow.ts
+│       ├── sprint.ts
+│       └── agent.ts
 └── tests/
     ├── server.test.ts
     ├── state-machine.test.ts
+    ├── ai/
     ├── db/
     └── tools/
 ```
@@ -143,7 +178,7 @@ All tools include MCP security annotations:
 - `readOnlyHint` - Read-only operations
 - `destructiveHint` - Destructive operations require confirmation
 - `idempotentHint` - Safe to retry
-- `openWorldHint` - External system access
+- `openWorldHint` - External system access (AI tools)
 
 ## License
 

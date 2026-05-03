@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { AIClient } from '../src/ai/client.js';
+import { AIClient } from '../../src/ai/client.js';
 
 describe('AIClient', () => {
   const mockApiKey = 'sk-test-key';

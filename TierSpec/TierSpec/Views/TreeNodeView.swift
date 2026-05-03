@@ -221,7 +221,7 @@ extension TreeNodeView {
     static func makeSampleItem(
         type: ItemTypeDTO,
         title: String,
-        status: ItemStatusDTO = .backlog,
+        status: ItemStatusDTO = .todo,
         children: [TierItemDTO] = []
     ) -> TierItemDTO {
         TierItemDTO(

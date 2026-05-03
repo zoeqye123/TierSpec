@@ -8,75 +8,299 @@
 import SwiftUI
 
 private enum TreeNodePreviewFactory {
-    static func singleCapability() -> TierItem {
-        TierItem(
+    static func singleCapability() -> TierItemDTO {
+        TierItemDTO(
+            id: UUID(),
             type: .capability,
+            parentId: nil,
+            sprintId: nil,
             title: "User Management",
-            status: .in_progress
+            description: nil,
+            status: .inProgress,
+            priority: 0,
+            position: 0,
+            storyPoints: nil,
+            complexity: nil,
+            aiGenerated: false,
+            aiConfidence: nil,
+            aiReasoning: nil,
+            labels: [],
+            createdAt: Date(),
+            updatedAt: Date(),
+            deletedAt: nil,
+            children: []
         )
     }
 
-    static func singleStory() -> TierItem {
-        TierItem(
-            type: .user_story,
+    static func singleStory() -> TierItemDTO {
+        TierItemDTO(
+            id: UUID(),
+            type: .userStory,
+            parentId: nil,
+            sprintId: nil,
             title: "As a user, I want to reset my password",
+            description: nil,
             status: .todo,
+            priority: 0,
+            position: 0,
+            storyPoints: nil,
+            complexity: nil,
             aiGenerated: true,
-            aiConfidence: 0.85
+            aiConfidence: 0.85,
+            aiReasoning: nil,
+            labels: [],
+            createdAt: Date(),
+            updatedAt: Date(),
+            deletedAt: nil,
+            children: []
         )
     }
 
-    static func hierarchyRoot() -> TierItem {
-        let capability = TierItem(type: .capability, title: "E-Commerce Platform", status: .in_progress)
-        let feature = TierItem(type: .feature, title: "Shopping Cart", status: .todo)
-        let story = TierItem(type: .user_story, title: "Add items to cart", status: .todo, aiGenerated: true)
-        let testCase = TierItem(type: .test_case, title: "Verify cart total calculation", status: .todo)
+    static func hierarchyRoot() -> TierItemDTO {
+        let capabilityId = UUID()
+        let featureId = UUID()
+        let storyId = UUID()
+        let testCaseId = UUID()
+        
+        let testCase = TierItemDTO(
+            id: testCaseId,
+            type: .testCase,
+            parentId: storyId,
+            sprintId: nil,
+            title: "Verify cart total calculation",
+            description: nil,
+            status: .todo,
+            priority: 0,
+            position: 0,
+            storyPoints: nil,
+            complexity: nil,
+            aiGenerated: false,
+            aiConfidence: nil,
+            aiReasoning: nil,
+            labels: [],
+            createdAt: Date(),
+            updatedAt: Date(),
+            deletedAt: nil,
+            children: []
+        )
+        
+        let story = TierItemDTO(
+            id: storyId,
+            type: .userStory,
+            parentId: featureId,
+            sprintId: nil,
+            title: "Add items to cart",
+            description: nil,
+            status: .todo,
+            priority: 0,
+            position: 0,
+            storyPoints: nil,
+            complexity: nil,
+            aiGenerated: true,
+            aiConfidence: nil,
+            aiReasoning: nil,
+            labels: [],
+            createdAt: Date(),
+            updatedAt: Date(),
+            deletedAt: nil,
+            children: [testCase]
+        )
+        
+        let feature = TierItemDTO(
+            id: featureId,
+            type: .feature,
+            parentId: capabilityId,
+            sprintId: nil,
+            title: "Shopping Cart",
+            description: nil,
+            status: .todo,
+            priority: 0,
+            position: 0,
+            storyPoints: nil,
+            complexity: nil,
+            aiGenerated: false,
+            aiConfidence: nil,
+            aiReasoning: nil,
+            labels: [],
+            createdAt: Date(),
+            updatedAt: Date(),
+            deletedAt: nil,
+            children: [story]
+        )
 
-        feature.parent = capability
-        story.parent = feature
-        testCase.parent = story
-
-        capability.children = [feature]
-        feature.children = [story]
-        story.children = [testCase]
-
-        return capability
+        return TierItemDTO(
+            id: capabilityId,
+            type: .capability,
+            parentId: nil,
+            sprintId: nil,
+            title: "E-Commerce Platform",
+            description: nil,
+            status: .inProgress,
+            priority: 0,
+            position: 0,
+            storyPoints: nil,
+            complexity: nil,
+            aiGenerated: false,
+            aiConfidence: nil,
+            aiReasoning: nil,
+            labels: [],
+            createdAt: Date(),
+            updatedAt: Date(),
+            deletedAt: nil,
+            children: [feature]
+        )
     }
 
-    static func multipleCapabilities() -> [TierItem] {
-        let auth = TierItem(type: .capability, title: "User Authentication", status: .done)
-        let login = TierItem(type: .feature, title: "Login", status: .done)
-        login.parent = auth
-        auth.children = [login]
+    static func multipleCapabilities() -> [TierItemDTO] {
+        let authId = UUID()
+        let loginId = UUID()
+        let login = TierItemDTO(
+            id: loginId,
+            type: .feature,
+            parentId: authId,
+            sprintId: nil,
+            title: "Login",
+            description: nil,
+            status: .done,
+            priority: 0,
+            position: 0,
+            storyPoints: nil,
+            complexity: nil,
+            aiGenerated: false,
+            aiConfidence: nil,
+            aiReasoning: nil,
+            labels: [],
+            createdAt: Date(),
+            updatedAt: Date(),
+            deletedAt: nil,
+            children: []
+        )
+        let auth = TierItemDTO(
+            id: authId,
+            type: .capability,
+            parentId: nil,
+            sprintId: nil,
+            title: "User Authentication",
+            description: nil,
+            status: .done,
+            priority: 0,
+            position: 0,
+            storyPoints: nil,
+            complexity: nil,
+            aiGenerated: false,
+            aiConfidence: nil,
+            aiReasoning: nil,
+            labels: [],
+            createdAt: Date(),
+            updatedAt: Date(),
+            deletedAt: nil,
+            children: [login]
+        )
 
-        let payment = TierItem(type: .capability, title: "Payment Processing", status: .in_progress)
-        let card = TierItem(type: .feature, title: "Credit Card", status: .test)
-        card.parent = payment
-        payment.children = [card]
+        let paymentId = UUID()
+        let cardId = UUID()
+        let card = TierItemDTO(
+            id: cardId,
+            type: .feature,
+            parentId: paymentId,
+            sprintId: nil,
+            title: "Credit Card",
+            description: nil,
+            status: .test,
+            priority: 0,
+            position: 0,
+            storyPoints: nil,
+            complexity: nil,
+            aiGenerated: false,
+            aiConfidence: nil,
+            aiReasoning: nil,
+            labels: [],
+            createdAt: Date(),
+            updatedAt: Date(),
+            deletedAt: nil,
+            children: []
+        )
+        let payment = TierItemDTO(
+            id: paymentId,
+            type: .capability,
+            parentId: nil,
+            sprintId: nil,
+            title: "Payment Processing",
+            description: nil,
+            status: .inProgress,
+            priority: 0,
+            position: 1,
+            storyPoints: nil,
+            complexity: nil,
+            aiGenerated: false,
+            aiConfidence: nil,
+            aiReasoning: nil,
+            labels: [],
+            createdAt: Date(),
+            updatedAt: Date(),
+            deletedAt: nil,
+            children: [card]
+        )
 
-        let inventory = TierItem(type: .capability, title: "Inventory Management", status: .todo)
+        let inventory = TierItemDTO(
+            id: UUID(),
+            type: .capability,
+            parentId: nil,
+            sprintId: nil,
+            title: "Inventory Management",
+            description: nil,
+            status: .todo,
+            priority: 0,
+            position: 2,
+            storyPoints: nil,
+            complexity: nil,
+            aiGenerated: false,
+            aiConfidence: nil,
+            aiReasoning: nil,
+            labels: [],
+            createdAt: Date(),
+            updatedAt: Date(),
+            deletedAt: nil,
+            children: []
+        )
 
         return [auth, payment, inventory]
     }
 
-    static func statusItems() -> [TierItem] {
-        let statuses: [ItemStatus] = [
-            .todo, .in_progress, .test, .done,
-            .blocked, .cancelled, .needs_info,
+    static func statusItems() -> [TierItemDTO] {
+        let statuses: [ItemStatusDTO] = [
+            .todo, .inProgress, .test, .done,
+            .blocked, .cancelled, .needsInfo,
         ]
 
         return statuses.enumerated().map { index, status in
-            TierItem(
+            TierItemDTO(
+                id: UUID(),
                 type: index.isMultiple(of: 2) ? .capability : .feature,
+                parentId: nil,
+                sprintId: nil,
                 title: "\(status.displayName) Item",
-                status: status
+                description: nil,
+                status: status,
+                priority: 0,
+                position: Double(index),
+                storyPoints: nil,
+                complexity: nil,
+                aiGenerated: false,
+                aiConfidence: nil,
+                aiReasoning: nil,
+                labels: [],
+                createdAt: Date(),
+                updatedAt: Date(),
+                deletedAt: nil,
+                children: []
             )
         }
     }
 }
 
 private struct PreviewTreeList: View {
-    let items: [TierItem]
+    let items: [TierItemDTO]
     @State private var expandedItems: Set<UUID> = []
     
     var body: some View {
@@ -85,7 +309,7 @@ private struct PreviewTreeList: View {
                 ForEach(items) { item in
                     TreeNodeView(
                         item: item,
-                        loadChildren: { $0.outlineChildren },
+                        loadChildren: { $0.children },
                         selectedItem: .constant(nil),
                         expandedItems: $expandedItems,
                         onAddChild: { _, _ in },

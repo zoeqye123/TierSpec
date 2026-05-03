@@ -16,7 +16,7 @@ struct ItemDetailView: View {
     @State private var isEditing: Bool = false
     @State private var draftTitle: String = ""
     @State private var draftDescription: String = ""
-    @State private var draftStatus: ItemStatusDTO = .backlog
+    @State private var draftStatus: ItemStatusDTO = .todo
     @State private var draftPriority: Int = 0
     @State private var draftStoryPoints: Int?
     @State private var draftComplexity: ComplexityDTO?
@@ -325,7 +325,7 @@ struct ItemDetailView: View {
             sprintId: nil,
             title: "New Test Case",
             description: nil,
-            status: .backlog,
+            status: .todo,
             priority: 0,
             position: nextPosition,
             storyPoints: nil,
@@ -353,7 +353,7 @@ struct TestCaseRowDTO: View {
         HStack(spacing: 8) {
             Image(systemName: "checkmark.shield")
                 .font(.caption)
-                .foregroundStyle(testCase.status == .completed ? .green : .secondary)
+                .foregroundStyle(testCase.status == .done ? .green : .secondary)
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(testCase.title)
@@ -562,7 +562,7 @@ struct OptionalStepper: View {
             sprintId: nil,
             title: "Sample Story",
             description: "A sample story",
-            status: .backlog,
+            status: .todo,
             priority: 50,
             position: 0,
             storyPoints: 5,

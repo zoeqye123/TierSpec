@@ -13,7 +13,7 @@ struct ItemDetailForm: View {
     @Binding var status: ItemStatus
     @Binding var priority: Int
     @Binding var storyPoints: Int?
-    @Binding var complexity: Complexity?
+    @Binding var complexity: ComplexityDTO?
     @Binding var validationError: String?
     
     let originalStatus: ItemStatus
@@ -205,7 +205,7 @@ struct ItemDetailForm: View {
                 .fontWeight(.medium)
             
             HStack(spacing: 8) {
-                ForEach(Complexity.allCases, id: \.self) { c in
+                ForEach(ComplexityDTO.allCases, id: \.self) { c in
                     Button {
                         complexity = c
                         if hasStoryPoints {
@@ -262,7 +262,7 @@ struct ItemDetailFormPreview: View {
     @State var status: ItemStatus = .in_progress
     @State var priority = 50
     @State var storyPoints: Int? = 5
-    @State var complexity: Complexity? = .m
+    @State var complexity: ComplexityDTO? = .m
     @State var validationError: String?
     
     var body: some View {

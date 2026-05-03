@@ -58,32 +58,20 @@ extension ItemTypeDTO {
 extension ItemStatusDTO {
     var color: Color {
         switch self {
-        case .requirementInput:
-            return .secondary
-        case .requirementReview:
-            return .blue
-        case .needsInfo:
-            return .yellow
-        case .backlog:
+        case .todo:
             return .gray
-        case .aiDecomposing:
-            return .purple
         case .inProgress:
             return .blue
-        case .waitingForTest:
-            return .orange
-        case .testing:
+        case .test:
             return .indigo
-        case .acceptance:
-            return .mint
-        case .completed:
-            return .green
-        case .published:
+        case .done:
             return .green
         case .blocked:
             return .red
         case .cancelled:
             return .gray
+        case .needsInfo:
+            return .yellow
         }
     }
 }
