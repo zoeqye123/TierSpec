@@ -5,6 +5,7 @@
 **AI-Driven Project Management for Harness Engineers**
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/zoeqye123/TierSpec/actions/workflows/ci.yml/badge.svg)](https://github.com/zoeqye123/TierSpec/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Swift](https://img.shields.io/badge/Swift-6.0+-FA7343?logo=swift&logoColor=white)](https://swift.org/)
 [![MCP](https://img.shields.io/badge/MCP-Protocol-green)](https://modelcontextprotocol.io/)
