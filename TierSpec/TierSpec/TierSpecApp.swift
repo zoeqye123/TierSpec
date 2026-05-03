@@ -354,9 +354,31 @@ struct ConnectionView: View {
                     .font(.subheadline)
                     .fontWeight(.medium)
                 
-                Text("The client automatically sends an initialize request with protocol version and client info, then sends an initialized notification to complete the handshake.")
+                Text("After starting the server, send an initialize request in your AI assistant (OpenCode, Codex, Claude Code, etc.):")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                
+                HStack {
+                    Text("The MCP server is running at stdio. Please initialize the connection.")
+                        .font(.system(.caption, design: .monospaced))
+                        .padding(10)
+                        .background(Color.secondary.opacity(0.1))
+                        .cornerRadius(6)
+                    
+                    Button {
+                        let pasteboard = NSPasteboard.general
+                        pasteboard.clearContents()
+                        pasteboard.setString("The MCP server is running at stdio. Please initialize the connection by sending an initialize request with protocol version 2024-11-05, then send the initialized notification.", forType: .string)
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                    }
+                    .help("Copy to clipboard")
+                }
+                
+                Text("The client automatically sends: initialize (protocol version + client info) → initialized notification")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.top, 8)
