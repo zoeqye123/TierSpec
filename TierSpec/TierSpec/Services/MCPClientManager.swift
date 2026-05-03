@@ -14,8 +14,18 @@ class MCPClientManager: ObservableObject {
     
     init() {
         let bundle = Bundle.main
-        let nodePath = bundle.path(forResource: "node", ofType: nil, inDirectory: "MacOS") ?? "/opt/homebrew/bin/node"
-        let serverPath = bundle.path(forResource: "dist/index.js", ofType: nil, inDirectory: "MacOS/tierspec-mcp-server") ?? ""
+        var nodePath = bundle.path(forResource: "node", ofType: nil, inDirectory: "MacOS") ?? "/opt/homebrew/bin/node"
+        var serverPath = bundle.path(forResource: "dist/index.js", ofType: nil, inDirectory: "MacOS/tierspec-mcp-server") ?? ""
+        
+        if serverPath.isEmpty || !FileManager.default.fileExists(atPath: serverPath) {
+            serverPath = "/Users/z/project/tierspec/mcp-server/dist/index.js"
+        }
+        
+        if !FileManager.default.fileExists(atPath: nodePath) {
+            nodePath = "/opt/homebrew/bin/node"
+        }
+        
+        print("[MCPClientManager] Node: \(nodePath), Server: \(serverPath)")
         
         self.processManager = MCPProcessManager(nodePath: nodePath, serverPath: serverPath)
     }
