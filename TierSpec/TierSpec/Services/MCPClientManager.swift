@@ -40,10 +40,37 @@ class MCPClientManager: ObservableObject {
             
             startReadingResponses(from: output)
             
+            // Send MCP initialize handshake
+            let initResponse = try await sendRequest(MCPRequest(
+                id: "init",
+                method: "initialize",
+                params: [
+                    "protocolVersion": AnyCodable("2024-11-05"),
+                    "capabilities": AnyCodable([:]),
+                    "clientInfo": AnyCodable([
+                        "name": "TierSpec",
+                        "version": "1.0.0"
+                    ])
+                ]
+            ))
+            
+            if initResponse.error != nil {
+                throw MCPError.communicationFailed("Initialize failed: \(initResponse.error?.message ?? "unknown error")")
+            }
+            
+            // Send initialized notification
+            let _ = try await sendRequest(MCPRequest(
+                id: "initialized",
+                method: "notifications/initialized",
+                params: nil
+            ))
+            
             self.isConnected = true
             self.connectionError = nil
+            print("[MCPClientManager] Connected successfully")
         } catch {
             self.connectionError = error.localizedDescription
+            print("[MCPClientManager] Connection failed: \(error.localizedDescription)")
             throw error
         }
     }
